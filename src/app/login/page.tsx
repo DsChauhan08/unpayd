@@ -26,7 +26,15 @@ export default function LoginPage() {
         const { isError, error, isSuccess } = await signInEmailPassword(email, password);
 
         if (isError) {
-            toast.error(error?.message || 'Login failed');
+            console.error('Login Error details:', error);
+
+            if (error?.message?.includes('verified') || error?.message?.includes('verify')) {
+                toast.error('Please verify your email address before logging in.');
+            } else if (error?.status === 401) {
+                toast.error('Invalid email or password.');
+            } else {
+                toast.error(error?.message || 'Login failed');
+            }
             return;
         }
 
