@@ -17,7 +17,18 @@ interface ModelSelectorProps {
     disabled?: boolean;
 }
 
-const modelOrder: ModelKey[] = ['quick', 'general', 'code', 'deepthink'];
+const modelOrder: ModelKey[] = [
+    'quick',
+    'general',
+    'code',
+    'deepthink',
+    'llama-3.1-8b',
+    'llama-3.3-70b',
+    'qwen-3-32b',
+    'gpt-oss-120b',
+    'qwen-3-235b',
+    'zai-glm-4.6'
+];
 
 export function ModelSelector({ value, onChange, disabled }: ModelSelectorProps) {
     const currentModel = MODELS[value];

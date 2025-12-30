@@ -37,7 +37,8 @@ export interface UploadedFile {
     size: number;
 }
 
-export type ModelKey = 'quick' | 'general' | 'code' | 'deepthink';
+import { type ModelKey } from '@/lib/openrouter';
+export type { ModelKey };
 
 export interface ModelInfo {
     id: string;

@@ -1,30 +1,6 @@
-import { MODELS, type ModelKey } from '@/lib/openrouter';
-import type { ChatMessage } from '@/lib/openrouter';
+import { MODELS, getCerebrasKeys, getOpenRouterKeys, type ModelKey, type ChatMessage } from '@/lib/openrouter';
 
 export const runtime = 'edge';
-
-// API Keys with round-robin failover
-const getApiKeys = () => {
-    const keys = [
-        process.env.OPENROUTER_KEY_1,
-        process.env.OPENROUTER_KEY_2,
-    ].filter(Boolean) as string[];
-
-    if (keys.length === 0) {
-        throw new Error('No OpenRouter API keys configured');
-    }
-
-    return keys;
-};
-
-let currentKeyIndex = 0;
-
-const getNextApiKey = () => {
-    const keys = getApiKeys();
-    const key = keys[currentKeyIndex];
-    currentKeyIndex = (currentKeyIndex + 1) % keys.length;
-    return key;
-};
 
 export async function POST(request: Request) {
     try {
@@ -50,94 +26,103 @@ export async function POST(request: Request) {
             });
         }
 
-        let apiKey = getNextApiKey();
-        let attempts = 0;
-        const maxAttempts = getApiKeys().length;
         let lastError: Error | null = null;
 
-        while (attempts < maxAttempts) {
+        // Iterate through configured providers for this model
+        for (const provider of modelConfig.providers) {
             try {
-                const systemMessage = webSearch
-                    ? { role: 'system' as const, content: 'You are a helpful AI assistant. When answering questions, provide accurate and up-to-date information. If you are unsure about something, say so.' }
-                    : { role: 'system' as const, content: 'You are a helpful AI assistant.' };
+                if (provider.name === 'cerebras') {
+                    const keys = getCerebrasKeys();
+                    if (keys.length === 0) continue; // Skip if not configured
 
-                const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${apiKey}`,
-                        'Content-Type': 'application/json',
-                        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-                        'X-Title': 'Unpayd',
-                    },
-                    body: JSON.stringify({
-                        model: modelConfig.id,
-                        messages: [systemMessage, ...messages],
-                        stream: true,
-                    }),
-                });
+                    // Cerebras does not support web search plugin currently
+                    const systemMessage = { role: 'system' as const, content: 'You are a helpful AI assistant.' };
 
-                if (!response.ok) {
-                    const error = await response.json();
-                    if (response.status === 429) {
-                        // Rate limited, try next key
-                        apiKey = getNextApiKey();
-                        attempts++;
-                        lastError = new Error('Rate limited');
-                        continue;
-                    }
-                    throw new Error(error.error?.message || 'OpenRouter API error');
-                }
+                    // Round-robin/Failover for Cerebras keys
+                    for (const apiKey of keys) {
+                        try {
+                            const response = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+                                method: 'POST',
+                                headers: {
+                                    'Authorization': `Bearer ${apiKey}`,
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    model: provider.id,
+                                    messages: [systemMessage, ...messages],
+                                    stream: true,
+                                }),
+                            });
 
-                // Create a TransformStream to convert OpenRouter's SSE format
-                const encoder = new TextEncoder();
-                const decoder = new TextDecoder();
-
-                const transformStream = new TransformStream({
-                    async transform(chunk, controller) {
-                        const text = decoder.decode(chunk);
-                        const lines = text.split('\n').filter(line => line.startsWith('data: '));
-
-                        for (const line of lines) {
-                            const data = line.slice(6);
-                            if (data === '[DONE]') {
-                                controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                                continue;
+                            if (!response.ok) {
+                                const error = await response.json().catch(() => ({}));
+                                throw new Error(error.error?.message || `Cerebras API error: ${response.status}`);
                             }
 
-                            try {
-                                const parsed = JSON.parse(data);
-                                const token = parsed.choices?.[0]?.delta?.content || '';
-                                if (token) {
-                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token })}\n\n`));
-                                }
-                            } catch {
-                                // Skip unparseable chunks
-                            }
+                            return handleStreamResponse(response);
+                        } catch (e) {
+                            lastError = e as Error;
+                            // Continue to next key
                         }
-                    },
-                });
+                    }
 
-                return new Response(response.body?.pipeThrough(transformStream), {
-                    headers: {
-                        'Content-Type': 'text/event-stream',
-                        'Cache-Control': 'no-cache',
-                        'Connection': 'keep-alive',
-                    },
-                });
-            } catch (error) {
-                attempts++;
-                lastError = error as Error;
-                if (attempts < maxAttempts) {
-                    apiKey = getNextApiKey();
+                } else if (provider.name === 'openrouter') {
+                    const keys = getOpenRouterKeys();
+                    if (keys.length === 0) continue;
+
+                    // Round-robin/Failover for OpenRouter keys
+                    // We try all keys before giving up on OpenRouter
+                    for (const apiKey of keys) {
+                        try {
+                            const systemMessage = webSearch
+                                ? { role: 'system' as const, content: 'You have access to web search. Use current information when relevant.' }
+                                : { role: 'system' as const, content: 'You are a helpful AI assistant.' };
+
+                            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                                method: 'POST',
+                                headers: {
+                                    'Authorization': `Bearer ${apiKey}`,
+                                    'Content-Type': 'application/json',
+                                    'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+                                    'X-Title': 'Unpayd',
+                                },
+                                body: JSON.stringify({
+                                    model: provider.id,
+                                    messages: [systemMessage, ...messages],
+                                    stream: true,
+                                    // Enable web search if supported
+                                    ...(webSearch && {
+                                        plugins: [{ id: 'web' }]
+                                    }),
+                                }),
+                            });
+
+                            if (!response.ok) {
+                                const error = await response.json();
+                                // If 429 or 5xx, try next key. 400/401 might be fatal but let's try next key just in case (e.g. invalid key)
+                                throw new Error(error.error?.message || `OpenRouter API error: ${response.status}`);
+                            }
+
+                            return handleStreamResponse(response);
+
+                        } catch (e) {
+                            lastError = e as Error;
+                            // Continue to next key
+                        }
+                    }
                 }
+            } catch (e) {
+                lastError = e as Error;
+                // Continue to next provider
             }
         }
 
-        // All keys failed
+        // All configured providers/keys failed
         return new Response(
-            JSON.stringify({ error: lastError?.message || 'All API keys exhausted' }),
+            JSON.stringify({ error: lastError?.message || 'All providers failed' }),
             { status: 500, headers: { 'Content-Type': 'application/json' } }
         );
+
     } catch (error) {
         return new Response(
             JSON.stringify({ error: (error as Error).message || 'Internal server error' }),
@@ -145,3 +130,42 @@ export async function POST(request: Request) {
         );
     }
 }
+
+function handleStreamResponse(upstreamResponse: Response) {
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+
+    const transformStream = new TransformStream({
+        async transform(chunk, controller) {
+            const text = decoder.decode(chunk);
+            const lines = text.split('\n').filter(line => line.startsWith('data: '));
+
+            for (const line of lines) {
+                const data = line.slice(6);
+                if (data === '[DONE]') {
+                    controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                    continue;
+                }
+
+                try {
+                    const parsed = JSON.parse(data);
+                    const token = parsed.choices?.[0]?.delta?.content || '';
+                    if (token) {
+                        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token })}\n\n`));
+                    }
+                } catch {
+                    // Skip unparseable chunks
+                }
+            }
+        },
+    });
+
+    return new Response(upstreamResponse.body?.pipeThrough(transformStream), {
+        headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+        },
+    });
+}
+

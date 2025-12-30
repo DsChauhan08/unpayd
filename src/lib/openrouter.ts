@@ -1,55 +1,171 @@
-// OpenRouter API client with dual key failover
-// Models: General, Coding, Deep Think, Quick
+// OpenRouter and Cerebras API client
+// Models: General, Coding, Deep Think, Quick + New Cerebras Models
+
+export interface ModelProvider {
+    name: 'cerebras' | 'openrouter';
+    id: string;
+}
+
+export interface ModelConfig {
+    name: string;
+    description: string;
+    icon: string;
+    providers: ModelProvider[];
+}
 
 export const MODELS = {
+    // Legacy/Functional Mappings (Updated to use best available)
     quick: {
-        id: 'xiaomi/mimo-v2-flash:free',
-        name: 'Quick',
+        name: 'Quick (Llama 3.1 8B)',
         icon: '⚡',
         description: 'Fast responses for simple tasks',
+        providers: [
+            { name: 'cerebras', id: 'llama3.1-8b' },
+            { name: 'openrouter', id: 'meta-llama/llama-3.1-8b-instruct' }
+        ]
     },
     general: {
-        id: 'nousresearch/hermes-3-llama-3.1-405b:free',
-        name: 'General',
+        name: 'General (Llama 3.3 70B)',
         icon: '💬',
         description: 'Versatile AI for everyday conversations',
+        providers: [
+            { name: 'cerebras', id: 'llama-3.3-70b' },
+            { name: 'openrouter', id: 'meta-llama/llama-3.3-70b-instruct' }
+        ]
     },
     code: {
-        id: 'qwen/qwen3-coder:free',
-        name: 'Coding',
+        name: 'Coding (Qwen 3 32B)',
         icon: '💻',
         description: 'Specialized for programming tasks',
+        providers: [
+            { name: 'cerebras', id: 'qwen-3-32b' },
+            { name: 'openrouter', id: 'qwen/qwen-2.5-32b-instruct' } // Fallback for Qwen 3 if available, or similar
+        ]
     },
     deepthink: {
-        id: 'moonshotai/kimi-k2:free',
-        name: 'Deep Think',
+        name: 'Deep Think (GPT OSS 120B)',
         icon: '🧠',
         description: 'Complex reasoning and analysis',
+        providers: [
+            { name: 'cerebras', id: 'gpt-oss-120b' },
+            // Add OpenRouter fallback if known, otherwise just Cerebras
+        ]
     },
+    // Explicit Models
+    'llama-3.1-8b': {
+        name: 'Llama 3.1 8B',
+        icon: '🦙',
+        description: '8B Parameters - Fast',
+        providers: [
+            { name: 'cerebras', id: 'llama3.1-8b' },
+            { name: 'openrouter', id: 'meta-llama/llama-3.1-8b-instruct' }
+        ]
+    },
+    'llama-3.3-70b': {
+        name: 'Llama 3.3 70B',
+        icon: '🦙',
+        description: '70B Parameters - High Performance',
+        providers: [
+            { name: 'cerebras', id: 'llama-3.3-70b' },
+            { name: 'openrouter', id: 'meta-llama/llama-3.3-70b-instruct' }
+        ]
+    },
+    'qwen-3-32b': {
+        name: 'Qwen 3 32B',
+        icon: '🤖',
+        description: '32B Parameters',
+        providers: [
+            { name: 'cerebras', id: 'qwen-3-32b' },
+            { name: 'openrouter', id: 'qwen/qwen-2.5-32b-instruct' }
+        ]
+    },
+    'gpt-oss-120b': {
+        name: 'GPT OSS 120B',
+        icon: '🤖',
+        description: '120B Parameters',
+        providers: [
+            { name: 'cerebras', id: 'gpt-oss-120b' }
+        ]
+    },
+    // Preview Models
+    'qwen-3-235b': {
+        name: 'Qwen 3 235B (Preview)',
+        icon: '🧪',
+        description: '235B Parameters - Preview',
+        providers: [
+            { name: 'cerebras', id: 'qwen-3-235b-a22b-instruct-2507' }
+        ]
+    },
+    'zai-glm-4.6': {
+        name: 'Z.ai GLM 4.6 (Preview)',
+        icon: '🧪',
+        description: '357B Parameters - Preview',
+        providers: [
+            { name: 'cerebras', id: 'zai-glm-4.6' }
+        ]
+    }
 } as const;
 
 export type ModelKey = keyof typeof MODELS;
 
-// API Keys with round-robin failover
-const getApiKeys = () => {
-    const keys = [
-        process.env.OPENROUTER_KEY_1,
-        process.env.OPENROUTER_KEY_2,
-    ].filter(Boolean) as string[];
+// OpenRouter API Keys with dynamic loading
+export const getOpenRouterKeys = () => {
+    const keys: string[] = [];
+    let i = 1;
+    while (true) {
+        // Accessing via bracket notation to allow dynamic lookup while respecting some bundlers
+        // Note: In Next.js Edge, process.env is usually just an object.
+        const key = process.env[`OPENROUTER_KEY_${i}`];
+        if (!key) break;
+        keys.push(key);
+        i++;
+    }
 
-    if (keys.length === 0) {
-        throw new Error('No OpenRouter API keys configured');
+    // Fallback if no numbered keys, check OPENROUTER_API_KEY
+    if (keys.length === 0 && process.env.OPENROUTER_API_KEY) {
+        keys.push(process.env.OPENROUTER_API_KEY);
     }
 
     return keys;
 };
 
-let currentKeyIndex = 0;
+// Cerebras API Keys with dynamic loading
+export const getCerebrasKeys = () => {
+    const keys: string[] = [];
+    let i = 1;
+    while (true) {
+        const key = process.env[`CEREBRAS_API_KEY_${i}`];
+        if (!key) break;
+        keys.push(key);
+        i++;
+    }
 
-export const getNextApiKey = () => {
-    const keys = getApiKeys();
-    const key = keys[currentKeyIndex];
-    currentKeyIndex = (currentKeyIndex + 1) % keys.length;
+    // Fallback if no numbered keys, check CEREBRAS_API_KEY
+    if (keys.length === 0 && process.env.CEREBRAS_API_KEY) {
+        keys.push(process.env.CEREBRAS_API_KEY);
+    }
+
+    return keys;
+};
+
+// Helper to get next OpenRouter key (round-robin state management)
+// Helper to get next OpenRouter key (round-robin state management)
+let currentOpenRouterKeyIndex = 0;
+export const getNextOpenRouterKey = () => {
+    const keys = getOpenRouterKeys();
+    if (keys.length === 0) return null;
+    const key = keys[currentOpenRouterKeyIndex];
+    currentOpenRouterKeyIndex = (currentOpenRouterKeyIndex + 1) % keys.length;
+    return key;
+};
+
+// Helper to get next Cerebras key (round-robin state management)
+let currentCerebrasKeyIndex = 0;
+export const getNextCerebrasKey = () => {
+    const keys = getCerebrasKeys();
+    if (keys.length === 0) return null;
+    const key = keys[currentCerebrasKeyIndex];
+    currentCerebrasKeyIndex = (currentCerebrasKeyIndex + 1) % keys.length;
     return key;
 };
 
@@ -64,93 +180,101 @@ export interface StreamCallbacks {
     onError: (error: Error) => void;
 }
 
+// NOTE: streamChat implementation below is for client-side or legacy usage.
+// The main logic is now in /src/app/api/chat/route.ts
 export async function streamChat(
     messages: ChatMessage[],
     modelKey: ModelKey = 'general',
     webSearchEnabled: boolean = false,
     callbacks: StreamCallbacks
 ) {
-    const model = MODELS[modelKey];
-    let apiKey = getNextApiKey();
-    let attempts = 0;
-    const maxAttempts = getApiKeys().length;
+    const modelConfig = MODELS[modelKey];
+    if (!modelConfig) {
+        callbacks.onError(new Error('Invalid model'));
+        return;
+    }
 
-    while (attempts < maxAttempts) {
+    // Simple implementation: Try providers in order
+    for (const provider of modelConfig.providers) {
         try {
-            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json',
-                    'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-                    'X-Title': 'Unpayd',
-                },
-                body: JSON.stringify({
-                    model: model.id,
-                    messages: webSearchEnabled
-                        ? [
-                            { role: 'system', content: 'You have access to web search. Use current information when relevant.' },
-                            ...messages
-                        ]
-                        : messages,
-                    stream: true,
-                    // Enable web search if supported
-                    ...(webSearchEnabled && {
-                        plugins: [{ id: 'web' }]
+            if (provider.name === 'cerebras') {
+                const apiKey = getNextCerebrasKey();
+                if (!apiKey) continue; // Skip if no key
+
+                // Cerebras fetch logic
+                const response = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model: provider.id,
+                        messages,
+                        stream: true,
                     }),
-                }),
-            });
+                });
 
-            if (!response.ok) {
-                const error = await response.json();
-                if (response.status === 429) {
-                    // Rate limited, try next key
-                    apiKey = getNextApiKey();
-                    attempts++;
-                    continue;
-                }
-                throw new Error(error.error?.message || 'OpenRouter API error');
+                if (!response.ok) throw new Error('Cerebras error');
+
+                await handleStream(response, callbacks);
+                return; // Success
+            } else if (provider.name === 'openrouter') {
+                const apiKey = getNextOpenRouterKey();
+                if (!apiKey) continue;
+
+                const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json',
+                        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+                        'X-Title': 'Unpayd',
+                    },
+                    body: JSON.stringify({
+                        model: provider.id,
+                        messages,
+                        stream: true,
+                    }),
+                });
+
+                if (!response.ok) throw new Error('OpenRouter error');
+
+                await handleStream(response, callbacks);
+                return; // Success
             }
-
-            const reader = response.body?.getReader();
-            if (!reader) throw new Error('No response body');
-
-            const decoder = new TextDecoder();
-            let fullText = '';
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n').filter(line => line.startsWith('data: '));
-
-                for (const line of lines) {
-                    const data = line.slice(6);
-                    if (data === '[DONE]') continue;
-
-                    try {
-                        const parsed = JSON.parse(data);
-                        const token = parsed.choices?.[0]?.delta?.content || '';
-                        if (token) {
-                            fullText += token;
-                            callbacks.onToken(token);
-                        }
-                    } catch {
-                        // Skip unparseable chunks
-                    }
-                }
-            }
-
-            callbacks.onComplete(fullText);
-            return;
-        } catch (error) {
-            attempts++;
-            if (attempts >= maxAttempts) {
-                callbacks.onError(error as Error);
-                return;
-            }
-            apiKey = getNextApiKey();
+        } catch (e) {
+            console.error(`Provider ${provider.name} failed:`, e);
+            // Continue to next provider
         }
     }
+
+    callbacks.onError(new Error('All providers failed'));
 }
+
+async function handleStream(response: Response, callbacks: StreamCallbacks) {
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
+    const decoder = new TextDecoder();
+    let fullText = '';
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n').filter(line => line.startsWith('data: '));
+        for (const line of lines) {
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
+            try {
+                const parsed = JSON.parse(data);
+                const token = parsed.choices?.[0]?.delta?.content || '';
+                if (token) {
+                    fullText += token;
+                    callbacks.onToken(token);
+                }
+            } catch { }
+        }
+    }
+    callbacks.onComplete(fullText);
+}
+
