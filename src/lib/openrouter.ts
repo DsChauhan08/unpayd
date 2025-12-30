@@ -108,20 +108,18 @@ export const MODELS = {
 
 export type ModelKey = keyof typeof MODELS;
 
-// OpenRouter API Keys with dynamic loading
+// OpenRouter API Keys - Edge runtime requires static access
 export const getOpenRouterKeys = () => {
     const keys: string[] = [];
-    let i = 1;
-    while (true) {
-        // Accessing via bracket notation to allow dynamic lookup while respecting some bundlers
-        // Note: In Next.js Edge, process.env is usually just an object.
-        const key = process.env[`OPENROUTER_KEY_${i}`];
-        if (!key) break;
-        keys.push(key);
-        i++;
-    }
+    
+    // Static access for Edge runtime compatibility
+    if (process.env.OPENROUTER_KEY_1) keys.push(process.env.OPENROUTER_KEY_1);
+    if (process.env.OPENROUTER_KEY_2) keys.push(process.env.OPENROUTER_KEY_2);
+    if (process.env.OPENROUTER_KEY_3) keys.push(process.env.OPENROUTER_KEY_3);
+    if (process.env.OPENROUTER_KEY_4) keys.push(process.env.OPENROUTER_KEY_4);
+    if (process.env.OPENROUTER_KEY_5) keys.push(process.env.OPENROUTER_KEY_5);
 
-    // Fallback if no numbered keys, check OPENROUTER_API_KEY
+    // Fallback to single key
     if (keys.length === 0 && process.env.OPENROUTER_API_KEY) {
         keys.push(process.env.OPENROUTER_API_KEY);
     }
@@ -129,18 +127,18 @@ export const getOpenRouterKeys = () => {
     return keys;
 };
 
-// Cerebras API Keys with dynamic loading
+// Cerebras API Keys - Edge runtime requires static access
 export const getCerebrasKeys = () => {
     const keys: string[] = [];
-    let i = 1;
-    while (true) {
-        const key = process.env[`CEREBRAS_API_KEY_${i}`];
-        if (!key) break;
-        keys.push(key);
-        i++;
-    }
+    
+    // Static access for Edge runtime compatibility
+    if (process.env.CEREBRAS_API_KEY_1) keys.push(process.env.CEREBRAS_API_KEY_1);
+    if (process.env.CEREBRAS_API_KEY_2) keys.push(process.env.CEREBRAS_API_KEY_2);
+    if (process.env.CEREBRAS_API_KEY_3) keys.push(process.env.CEREBRAS_API_KEY_3);
+    if (process.env.CEREBRAS_API_KEY_4) keys.push(process.env.CEREBRAS_API_KEY_4);
+    if (process.env.CEREBRAS_API_KEY_5) keys.push(process.env.CEREBRAS_API_KEY_5);
 
-    // Fallback if no numbered keys, check CEREBRAS_API_KEY
+    // Fallback to single key (CEREBRAS_API_KEY without number)
     if (keys.length === 0 && process.env.CEREBRAS_API_KEY) {
         keys.push(process.env.CEREBRAS_API_KEY);
     }
@@ -148,7 +146,6 @@ export const getCerebrasKeys = () => {
     return keys;
 };
 
-// Helper to get next OpenRouter key (round-robin state management)
 // Helper to get next OpenRouter key (round-robin state management)
 let currentOpenRouterKeyIndex = 0;
 export const getNextOpenRouterKey = () => {
