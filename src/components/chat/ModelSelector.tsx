@@ -26,6 +26,8 @@ const modelOrder: ModelKey[] = [
     'llama-3.3-70b',
     'qwen-3-32b',
     'gpt-oss-120b',
+    'qwen-3-235b',
+    'zai-glm-4.6',
 ];
 
 export function ModelSelector({ value, onChange, disabled }: ModelSelectorProps) {

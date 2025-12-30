@@ -86,6 +86,23 @@ export const MODELS = {
         providers: [
             { name: 'cerebras', id: 'gpt-oss-120b' }
         ]
+    },
+    // Preview Models (Cerebras only)
+    'qwen-3-235b': {
+        name: 'Qwen 3 235B',
+        icon: '🧪',
+        description: '235B Parameters - Preview',
+        providers: [
+            { name: 'cerebras', id: 'qwen-3-235b-a22b-instruct-2507' }
+        ]
+    },
+    'zai-glm-4.6': {
+        name: 'Z.ai GLM 4.6',
+        icon: '🧪',
+        description: '357B Parameters - Preview',
+        providers: [
+            { name: 'cerebras', id: 'zai-glm-4.6' }
+        ]
     }
 } as const;
 
