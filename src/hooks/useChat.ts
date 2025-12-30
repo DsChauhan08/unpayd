@@ -38,17 +38,13 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     // Use standard AI SDK hook
     const {
         messages: aiMessages,
-        input,
-        handleInputChange,
-        handleSubmit,
-        isLoading,
+        status,
         stop,
         setMessages: setAiMessages,
         error: aiError,
-        append // Added append for programmatic message sending
+        sendMessage: sendAiMessage
     } = useAiChat({
-        api: '/api/chat',
-        initialMessages: initialMessages as any, // Cast types as DB Message !== AI SDK Message exactly
+        initialMessages: initialMessages as any,
         body: {
             model: currentModel,
             webSearch: webSearchEnabled,
@@ -57,13 +53,15 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             console.error('AI Chat Error:', err);
             toast.error(err.message || 'Failed to send message');
         },
-        onFinish: async (message) => {
+        onFinish: async ({ message }) => {
             // Save Assistant Message to Turso
             if (chatId && isAuthenticated) {
                 await saveMessageToDb(chatId, 'assistant', message.content);
             }
         }
     });
+
+    const isLoading = status === 'streaming' || status === 'submitted';
 
     // We must manually cast AI SDK messages to our DB Message type for consumption
     const messages = aiMessages as unknown as DbMessage[];
@@ -120,15 +118,11 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             await saveMessageToDb(currentChatId, 'user', content);
         }
 
-        // Trigger AI SDK submit using append
-        append({
-            id: crypto.randomUUID(), // AI SDK will generate its own ID, but we can provide one
-            role: 'user',
-            content: content,
-            // files: files // AI SDK doesn't directly support files in append, would need custom handling
-        });
+        // Trigger AI SDK submit using sendMessage
+        // content is string, SDK manages the rest
+        await sendAiMessage(content);
 
-    }, [chatId, currentModel, isAuthenticated, user, append]);
+    }, [chatId, currentModel, isAuthenticated, user, sendAiMessage]);
 
     return {
         messages,

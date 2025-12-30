@@ -54,7 +54,7 @@ export async function POST(request: Request) {
                             abortSignal: AbortSignal.timeout(10000),
                         });
 
-                        return result.toDataStreamResponse();
+                        return result.toTextStreamResponse();
                     } catch (e) {
                         console.error('Cerebras Error:', e);
                         lastError = e as Error;
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
                             abortSignal: AbortSignal.timeout(10000),
                         });
 
-                        return result.toDataStreamResponse();
+                        return result.toTextStreamResponse();
                     } catch (e) {
                         console.error('OpenRouter Error:', e);
                         lastError = e as Error;
