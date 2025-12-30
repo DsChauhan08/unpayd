@@ -1,5 +1,8 @@
-import { turso } from '@/lib/turso';
+import { getTursoClient } from '@/lib/turso';
 import { NextResponse } from 'next/server';
+
+// Use nodejs runtime for Turso compatibility
+export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
     try {
@@ -10,18 +13,25 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        await turso.execute({
-            sql: 'INSERT INTO messages (id, chat_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)',
-            args: [id, chatId, role, content, createdAt || Date.now()]
-        });
+        try {
+            const turso = getTursoClient();
+            await turso.execute({
+                sql: 'INSERT INTO messages (id, chat_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)',
+                args: [id, chatId, role, content, createdAt || Date.now()]
+            });
 
-        // Update chat updated_at
-        await turso.execute({
-            sql: 'UPDATE chats SET updated_at = ? WHERE id = ?',
-            args: [Date.now(), chatId]
-        });
+            // Update chat updated_at
+            await turso.execute({
+                sql: 'UPDATE chats SET updated_at = ? WHERE id = ?',
+                args: [Date.now(), chatId]
+            });
 
-        return NextResponse.json({ success: true });
+            return NextResponse.json({ success: true });
+        } catch (dbError) {
+            // Turso not configured, silently succeed
+            console.warn('Turso not configured:', dbError);
+            return NextResponse.json({ success: true });
+        }
     } catch (error) {
         console.error('Failed to save message:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

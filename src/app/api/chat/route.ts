@@ -2,8 +2,8 @@ import { MODELS, getCerebrasKeys, getOpenRouterKeys, type ModelKey, type ChatMes
 import { createOpenAI } from '@ai-sdk/openai';
 import { streamText, createUIMessageStreamResponse } from 'ai';
 
-export const runtime = 'edge';
-// constant max duration for Vercel
+// Use nodejs runtime for better compatibility
+export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
@@ -70,7 +70,8 @@ export async function POST(request: Request) {
                         });
 
                         const result = await streamText({
-                            model: cerebras(provider.id),
+                            // Use .chat() to force chat completions endpoint
+                            model: cerebras.chat(provider.id),
                             messages: coreMessages,
                             system: 'You are a helpful AI assistant.',
                         });
@@ -109,7 +110,8 @@ export async function POST(request: Request) {
                         });
 
                         const result = await streamText({
-                            model: openrouter(provider.id),
+                            // Use .chat() to force chat completions endpoint
+                            model: openrouter.chat(provider.id),
                             messages: coreMessages,
                             system: webSearch
                                 ? 'You have access to web search. Use current information when relevant.'
