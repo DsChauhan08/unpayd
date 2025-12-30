@@ -4,27 +4,32 @@ A beautiful, fast, and free AI chat application powered by open-source models vi
 
 ## ✨ Features
 
-- **4 Free AI Models**
-  - ⚡ Quick (Xiaomi MiMo) - Fast responses
-  - 💬 General (Hermes 3 405B) - Everyday chat
-  - 💻 Coding (Qwen3 Coder) - Programming help
-  - 🧠 Deep Think (Kimi K2) - Complex reasoning
+- **Multi-Provider AI (Cerebras + OpenRouter)**
+  - ⚡ **Priority**: Cerebras (Free, Fast) -> OpenRouter (Fallback)
+  - 🔄 Automatic failover and round-robin load balancing
+  - 🔑 Support for multiple API keys per provider
 
-- **Premium Features**
-  - 🎤 Voice input with Web Speech API
-  - 📎 File and image upload
+- **Supported Models**
+  - **Llama 3.1 8B** (Fast & Efficient)
+  - **Llama 3.3 70B** (General Purpose)
+  - **Qwen 3 32B** (Coding & Logic)
+  - **GPT OSS 120B** (Deep Reasoning)
+  - *Plus Preview Models*: Qwen 3 235B, Z.ai GLM 4.6
+
+- **Premium Interface**
+  - 🌙 Beautiful dark Grok-like UI
   - 🔍 Web search toggle
-  - 💾 Chat history & archives
-  - 🌙 Beautiful dark Grok-like interface
+  - 💭 Deep Think mode
+  - 📱 PWA support (Installable)
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
 - [Bun](https://bun.sh/) (or Node.js 20+)
-- [OpenRouter API Key](https://openrouter.ai/keys) (2 recommended for failover)
-- [PocketHost Account](https://pockethost.io/) (for auth)
-- [Turso Account](https://turso.tech/) (for chat storage)
+- [Cerebras API Key](https://cloud.cerebras.ai/) (Primary - Fast & Free)
+- [OpenRouter API Key](https://openrouter.ai/keys) (Backup)
+- [Nhost Account](https://nhost.io/) (for Auth & Database)
 
 ### 1. Clone and Install
 
@@ -36,35 +41,29 @@ bun install
 
 ### 2. Configure Environment
 
-Copy the example env file and fill in your credentials:
+Copy the example env file:
 
 ```bash
 cp .env.example .env.local
 ```
 
-Edit `.env.local`:
+Edit `.env.local` with your credentials:
+
 ```env
-OPENROUTER_KEY_1=sk-or-v1-your-first-key
-OPENROUTER_KEY_2=sk-or-v1-your-second-key
-NEXT_PUBLIC_POCKETBASE_URL=https://your-instance.pockethost.io
-TURSO_DATABASE_URL=libsql://your-db.turso.io
-TURSO_AUTH_TOKEN=your-turso-token
+# AI Providers
+CEREBRAS_API_KEY=your-cerebras-key
+OPENROUTER_KEY_1=your-openrouter-key
+# Add more keys as needed: CEREBRAS_API_KEY_2, OPENROUTER_KEY_2, etc.
+
+# Nhost (Auth & DB)
+NEXT_PUBLIC_NHOST_SUBDOMAIN=your-subdomain
+NEXT_PUBLIC_NHOST_REGION=your-region
+
+# App URL
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-### 3. Setup PocketHost
-
-1. Create a new instance at [pockethost.io](https://pockethost.io)
-2. The default `users` collection works out of the box
-3. Enable email verification in Settings → Mail settings
-
-### 4. Setup Turso
-
-1. Create a database at [turso.tech](https://turso.tech)
-2. Get your database URL and auth token
-3. Tables are created automatically on first use
-
-### 5. Run Development Server
+### 3. Run Development Server
 
 ```bash
 bun run dev
@@ -77,44 +76,9 @@ Open [http://localhost:3000](http://localhost:3000)
 ### Build and Run
 
 ```bash
-# Build the image
 docker build -t unpayd .
-
-# Run with environment variables
 docker run -p 3000:3000 --env-file .env.local unpayd
 ```
-
-### Docker Compose
-
-```bash
-# Start the application
-docker compose up -d
-
-# View logs
-docker compose logs -f
-
-# Stop
-docker compose down
-```
-
-## ☁️ Vercel Deployment
-
-1. Push your code to GitHub
-2. Import the project in [Vercel](https://vercel.com)
-3. Add environment variables in the Vercel dashboard
-4. Deploy!
-
-The free tier includes:
-- Unlimited static page visits
-- 100GB bandwidth
-- Edge functions
-
-## 📱 PWA Installation
-
-On mobile or desktop:
-1. Open the app in Chrome/Safari
-2. Click "Add to Home Screen" / "Install"
-3. The app works offline and feels native
 
 ## 🔧 Tech Stack
 
@@ -122,25 +86,23 @@ On mobile or desktop:
 |-----------|------------|
 | Frontend | Next.js 16, React 19 |
 | Styling | Tailwind CSS, shadcn/ui |
-| Auth | PocketBase (PocketHost) |
-| Database | Turso (libSQL) |
-| LLM | OpenRouter API |
+| Auth | **Nhost** (Postgres + Hasura) |
+| Database | **Turso** (LibSQL) |
+| AI Inference | **Cerebras** (Primary) + OpenRouter (Fallback) |
 | Analytics | Plausible (optional) |
 
-## 📊 OpenRouter Rate Limits
+## 📊 Rate Limiting & Failover
 
-| Account Type | Daily Limit | RPM |
-|--------------|-------------|-----|
-| Free (no credits) | 50 requests | 20 |
-| With $10 credit | 1,000 requests | 20 |
-
-Using 2 API keys doubles your capacity!
+The system uses a sophisticated priority queue:
+1. **Cerebras**: Tried first. Extremely fast (2000+ tokens/s).
+2. **OpenRouter**: Used if Cerebras fails or is rate-limited.
+3. **Multiple Keys**: If you add multiple keys (e.g., `CEREBRAS_API_KEY_1`, `CEREBRAS_API_KEY_2`), the app rotates through them to maximize throughput.
 
 ## 🔐 Security
 
-- All API calls are server-side (keys never exposed)
-- Auth handled by PocketBase with email verification
-- No data used for model training
+- API keys are stored server-side and never exposed to the client.
+- Auth is handled via secure Nhost sessions.
+- Chat data is encrypted in transit and at rest in Turso.
 
 ## 📄 License
 
@@ -148,4 +110,4 @@ MIT
 
 ---
 
-Built with ❤️ for families who want free AI chat
+Built with ❤️ for speed and accessibility.

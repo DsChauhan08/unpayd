@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { nhost } from '@/lib/nhost';
-import { CREATE_CHAT, ADD_MESSAGE } from '@/lib/graphql';
 import type { Message, ModelKey } from '@/types';
 import { useAuth } from './useAuth';
 
@@ -44,10 +42,16 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     const saveMessageToDb = async (currentChatId: string, role: 'user' | 'assistant', content: string) => {
         if (!isAuthenticated) return;
         try {
-            await nhost.graphql.request(ADD_MESSAGE, {
-                chatId: currentChatId,
-                role,
-                content
+            await fetch('/api/messages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: crypto.randomUUID(),
+                    chatId: currentChatId,
+                    role,
+                    content,
+                    createdAt: Date.now()
+                })
             });
         } catch (err) {
             console.error('Failed to save message:', err);
@@ -62,13 +66,23 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
         // Initialize ChatDB ID if needed
         let currentChatId = chatId;
-        if (!currentChatId && isAuthenticated) {
+        const { user } = useAuth(); // Get user from context to pass to API
+
+        if (!currentChatId && isAuthenticated && user) {
             try {
-                const data: any = await nhost.graphql.request(CREATE_CHAT, {
-                    title: content.slice(0, 50), // Simple title from first message
-                    model: currentModel
+                currentChatId = crypto.randomUUID();
+                await fetch('/api/chats', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: currentChatId,
+                        userId: user.id,
+                        title: content.slice(0, 50),
+                        model: currentModel,
+                        createdAt: Date.now()
+                    })
                 });
-                currentChatId = data.insert_chats_one.id;
+
                 setChatId(currentChatId);
                 // Update URL without reload
                 window.history.pushState({}, '', `/chat/${currentChatId}`);

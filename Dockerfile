@@ -11,7 +11,21 @@ RUN npm install -g bun && bun install --frozen-lockfile
 COPY . .
 
 # Build the application
+# Build the application
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# Expose env vars to build (if static generation needs them)
+# Note: For public env vars (NEXT_PUBLIC_), they must be present at build time
+ARG NEXT_PUBLIC_NHOST_SUBDOMAIN
+ARG NEXT_PUBLIC_NHOST_REGION
+ARG NEXT_PUBLIC_APP_URL
+ARG NEXT_PUBLIC_PLAUSIBLE_DOMAIN
+
+ENV NEXT_PUBLIC_NHOST_SUBDOMAIN=$NEXT_PUBLIC_NHOST_SUBDOMAIN
+ENV NEXT_PUBLIC_NHOST_REGION=$NEXT_PUBLIC_NHOST_REGION
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_PLAUSIBLE_DOMAIN=$NEXT_PUBLIC_PLAUSIBLE_DOMAIN
+
 RUN bun run build
 
 # Production stage
