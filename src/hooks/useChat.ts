@@ -1,11 +1,18 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useChat as useAiChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import type { Message as DbMessage, ModelKey } from '@/types';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
+import { 
+    saveChat, 
+    saveMessage, 
+    updateChatTitle,
+    getStoredMessages,
+    type StoredChat 
+} from '@/lib/chatStorage';
 
 interface UseChatOptions {
     initialMessages?: DbMessage[];
@@ -36,6 +43,20 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     const [currentModel, setCurrentModel] = useState<ModelKey>(initialModel);
     const [webSearchEnabled, setWebSearchEnabled] = useState(false);
 
+    // Load messages from localStorage if we have a chatId
+    const storedMessages = useMemo(() => {
+        if (!initialChatId) return [];
+        return getStoredMessages(initialChatId).map(m => ({
+            id: m.id,
+            chatId: m.chatId,
+            role: m.role,
+            content: m.content,
+            createdAt: new Date(m.createdAt),
+        }));
+    }, [initialChatId]);
+
+    const effectiveInitialMessages = initialMessages.length > 0 ? initialMessages : storedMessages;
+
     // Create transport with dynamic body that includes current model/settings
     const transport = useMemo(() => new DefaultChatTransport({
         api: '/api/chat',
@@ -56,7 +77,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     } = useAiChat({
         id: chatId || undefined,
         transport,
-        messages: initialMessages.map(m => ({
+        messages: effectiveInitialMessages.map(m => ({
             id: m.id,
             role: m.role,
             parts: [{ type: 'text' as const, text: m.content }],
@@ -67,14 +88,27 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             toast.error(err.message || 'Failed to send message');
         },
         onFinish: async (options) => {
-            // Save Assistant Message to Turso
+            // Save Assistant Message
             const message = options.messages[options.messages.length - 1];
-            if (chatId && isAuthenticated && message?.role === 'assistant') {
+            if (chatId && message?.role === 'assistant') {
                 const textContent = message.parts
                     ?.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
                     .map(p => p.text)
                     .join('') || '';
-                await saveMessageToDb(chatId, 'assistant', textContent);
+                
+                // Save to localStorage
+                saveMessage({
+                    id: message.id,
+                    chatId: chatId,
+                    role: 'assistant',
+                    content: textContent,
+                    createdAt: Date.now()
+                });
+
+                // Also try to save to backend if authenticated
+                if (isAuthenticated) {
+                    await saveMessageToBackend(chatId, 'assistant', textContent);
+                }
             }
         }
     });
@@ -95,8 +129,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         })),
     [aiMessages, chatId]);
 
-    const saveMessageToDb = async (currentChatId: string, role: 'user' | 'assistant', content: string) => {
-        if (!isAuthenticated) return;
+    const saveMessageToBackend = async (currentChatId: string, role: 'user' | 'assistant', content: string) => {
         try {
             await fetch('/api/messages', {
                 method: 'POST',
@@ -110,7 +143,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                 })
             });
         } catch (err) {
-            console.error('Failed to save message:', err);
+            console.error('Failed to save message to backend:', err);
         }
     };
 
@@ -120,31 +153,55 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         let currentChatId = chatId;
 
         // Create Chat if not exists
-        if (!currentChatId && isAuthenticated && user) {
-            try {
-                currentChatId = crypto.randomUUID();
-                await fetch('/api/chats', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        id: currentChatId,
-                        userId: user.id,
-                        title: content.slice(0, 50),
-                        model: currentModel,
-                        createdAt: Date.now()
-                    })
-                });
+        if (!currentChatId) {
+            currentChatId = crypto.randomUUID();
+            const chatTitle = content.slice(0, 50) + (content.length > 50 ? '...' : '');
+            
+            // Save to localStorage first (always works)
+            saveChat({
+                id: currentChatId,
+                title: chatTitle,
+                model: currentModel,
+                createdAt: Date.now(),
+                updatedAt: Date.now()
+            });
 
-                setChatId(currentChatId);
-                window.history.pushState({}, '', `/chat/${currentChatId}`);
-            } catch (err) {
-                console.error('Failed to create chat:', err);
+            setChatId(currentChatId);
+            window.history.pushState({}, '', `/chat/${currentChatId}`);
+
+            // Also try to save to backend if authenticated
+            if (isAuthenticated && user) {
+                try {
+                    await fetch('/api/chats', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id: currentChatId,
+                            userId: user.id,
+                            title: chatTitle,
+                            model: currentModel,
+                            createdAt: Date.now()
+                        })
+                    });
+                } catch (err) {
+                    console.error('Failed to create chat in backend:', err);
+                }
             }
         }
 
-        // Save User Message to DB immediately
-        if (currentChatId && isAuthenticated) {
-            await saveMessageToDb(currentChatId, 'user', content);
+        // Save User Message to localStorage
+        const messageId = crypto.randomUUID();
+        saveMessage({
+            id: messageId,
+            chatId: currentChatId,
+            role: 'user',
+            content,
+            createdAt: Date.now()
+        });
+
+        // Also try to save to backend if authenticated
+        if (isAuthenticated) {
+            await saveMessageToBackend(currentChatId, 'user', content);
         }
 
         // Trigger AI SDK submit

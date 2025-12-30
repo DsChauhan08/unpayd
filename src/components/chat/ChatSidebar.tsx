@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { nhost } from '@/lib/nhost';
 import { GET_CHATS } from '@/lib/graphql';
+import { getStoredChats, deleteChat as deleteStoredChat } from '@/lib/chatStorage';
 import {
     Sidebar,
     SidebarContent,
@@ -63,33 +64,77 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
     const [showArchived, setShowArchived] = useState(false);
 
     const fetchChats = async () => {
-        if (!isAuthenticated || !user?.id) return;
-        try {
-            const response: any = await nhost.graphql.request(GET_CHATS);
-            // Handle both response formats: { data: { chats } } or { chats }
-            const chatsData = response?.data?.chats || response?.chats || [];
-            const mappedChats = chatsData.map((c: any) => ({
-                id: c.id,
-                title: c.title,
-                model: c.model,
-                updatedAt: new Date(c.updated_at)
-            }));
-            setChats(mappedChats);
-        } catch (error) {
-            console.error('Failed to fetch chats:', error);
-            // Don't crash, just show empty state
-            setChats([]);
+        // First, try to get chats from localStorage (always available)
+        const localChats = getStoredChats().map(c => ({
+            id: c.id,
+            title: c.title,
+            model: c.model,
+            updatedAt: new Date(c.updatedAt)
+        }));
+
+        // If user is authenticated, try to fetch from backend
+        if (isAuthenticated && user?.id) {
+            try {
+                const response: any = await nhost.graphql.request(GET_CHATS);
+                const chatsData = response?.data?.chats || response?.chats;
+                
+                if (chatsData && Array.isArray(chatsData) && chatsData.length > 0) {
+                    const backendChats = chatsData.map((c: any) => ({
+                        id: c.id,
+                        title: c.title,
+                        model: c.model,
+                        updatedAt: new Date(c.updated_at || c.updatedAt)
+                    }));
+                    
+                    // Merge with local chats (prefer backend, but include local-only ones)
+                    const backendIds = new Set(backendChats.map((c: ChatItem) => c.id));
+                    const uniqueLocalChats = localChats.filter(c => !backendIds.has(c.id));
+                    const mergedChats = [...backendChats, ...uniqueLocalChats];
+                    mergedChats.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+                    setChats(mergedChats);
+                    return;
+                }
+            } catch (error) {
+                console.warn('Could not fetch chats from backend:', error);
+            }
         }
+
+        // Use local chats if backend failed or user not authenticated
+        setChats(localChats);
     };
 
     useEffect(() => {
         fetchChats();
-        // Poll for updates every 10 seconds? Or just on mount/path change?
-        // Path change might indicate a new chat created
-        if (pathname === '/chat' || pathname.startsWith('/chat/')) {
-            fetchChats();
+    }, [isAuthenticated, pathname, user?.id]);
+
+    // Refresh chats when path changes (new chat created)
+    useEffect(() => {
+        const handleStorageChange = () => fetchChats();
+        window.addEventListener('storage', handleStorageChange);
+        
+        // Also poll for changes every 2 seconds while on chat pages
+        const interval = setInterval(fetchChats, 2000);
+        
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+            clearInterval(interval);
+        };
+    }, [isAuthenticated, user?.id]);
+
+    const handleNewChat = () => {
+        if (onNewChat) {
+            onNewChat();
         }
-    }, [isAuthenticated, pathname]);
+        router.push('/chat');
+    };
+
+    const handleDeleteChat = (chatId: string) => {
+        deleteStoredChat(chatId);
+        fetchChats();
+        if (pathname === `/chat/${chatId}`) {
+            router.push('/chat');
+        }
+    };
 
     const handleLogout = () => {
         logout();
@@ -135,7 +180,7 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
 
                 {/* New Chat Button */}
                 <Button
-                    onClick={onNewChat}
+                    onClick={handleNewChat}
                     className="w-full bg-zinc-800 hover:bg-zinc-700 text-white justify-start gap-2"
                 >
                     <Plus className="w-4 h-4" />
@@ -199,6 +244,7 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
                                                             className="text-red-400"
+                                                            onClick={() => handleDeleteChat(chat.id)}
                                                         >
                                                             <Trash2 className="w-4 h-4 mr-2" />
                                                             Delete
