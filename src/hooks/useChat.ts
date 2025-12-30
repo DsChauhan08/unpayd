@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useChat as useAiChat } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
 import type { Message as DbMessage, ModelKey } from '@/types';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
@@ -15,7 +16,7 @@ interface UseChatOptions {
 interface UseChatReturn {
     messages: DbMessage[];
     isLoading: boolean;
-    isStreaming: boolean; // Alias for isLoading in ai/react
+    isStreaming: boolean;
     error: string | null;
     currentModel: ModelKey;
     webSearchEnabled: boolean;
@@ -35,7 +36,16 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     const [currentModel, setCurrentModel] = useState<ModelKey>(initialModel);
     const [webSearchEnabled, setWebSearchEnabled] = useState(false);
 
-    // Use standard AI SDK hook
+    // Create transport with dynamic body that includes current model/settings
+    const transport = useMemo(() => new DefaultChatTransport({
+        api: '/api/chat',
+        body: () => ({
+            model: currentModel,
+            webSearch: webSearchEnabled,
+        }),
+    }), [currentModel, webSearchEnabled]);
+
+    // Use AI SDK v3 hook with transport
     const {
         messages: aiMessages,
         status,
@@ -44,27 +54,46 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         error: aiError,
         sendMessage: sendAiMessage
     } = useAiChat({
-        initialMessages: initialMessages as any,
-        body: {
-            model: currentModel,
-            webSearch: webSearchEnabled,
-        },
+        id: chatId || undefined,
+        transport,
+        messages: initialMessages.map(m => ({
+            id: m.id,
+            role: m.role,
+            parts: [{ type: 'text' as const, text: m.content }],
+            createdAt: m.createdAt,
+        })),
         onError: (err) => {
             console.error('AI Chat Error:', err);
             toast.error(err.message || 'Failed to send message');
         },
-        onFinish: async ({ message }) => {
+        onFinish: async (options) => {
             // Save Assistant Message to Turso
-            if (chatId && isAuthenticated) {
-                await saveMessageToDb(chatId, 'assistant', message.content);
+            const message = options.messages[options.messages.length - 1];
+            if (chatId && isAuthenticated && message?.role === 'assistant') {
+                const textContent = message.parts
+                    ?.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+                    .map(p => p.text)
+                    .join('') || '';
+                await saveMessageToDb(chatId, 'assistant', textContent);
             }
         }
     });
 
     const isLoading = status === 'streaming' || status === 'submitted';
 
-    // We must manually cast AI SDK messages to our DB Message type for consumption
-    const messages = aiMessages as unknown as DbMessage[];
+    // Convert AI SDK messages to our DB Message type
+    const messages: DbMessage[] = useMemo(() => 
+        aiMessages.map(m => ({
+            id: m.id,
+            chatId: chatId || '',
+            role: m.role as 'user' | 'assistant',
+            content: m.parts
+                ?.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+                .map(p => p.text)
+                .join('') || '',
+            createdAt: m.createdAt ? new Date(m.createdAt) : new Date(),
+        })),
+    [aiMessages, chatId]);
 
     const saveMessageToDb = async (currentChatId: string, role: 'user' | 'assistant', content: string) => {
         if (!isAuthenticated) return;
@@ -118,9 +147,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             await saveMessageToDb(currentChatId, 'user', content);
         }
 
-        // Trigger AI SDK submit using sendMessage
-        // content is string, SDK manages the rest
-        await sendAiMessage(content);
+        // Trigger AI SDK submit
+        await sendAiMessage({ text: content });
 
     }, [chatId, currentModel, isAuthenticated, user, sendAiMessage]);
 

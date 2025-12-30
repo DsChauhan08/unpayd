@@ -1,6 +1,6 @@
 import { MODELS, getCerebrasKeys, getOpenRouterKeys, type ModelKey, type ChatMessage } from '@/lib/openrouter';
 import { createOpenAI } from '@ai-sdk/openai';
-import { streamText } from 'ai';
+import { streamText, createUIMessageStreamResponse } from 'ai';
 
 export const runtime = 'edge';
 // constant max duration for Vercel
@@ -26,11 +26,25 @@ export async function POST(request: Request) {
 
         let lastError: Error | null = null;
 
-        // Manual conversion to CoreMessage to avoid import issues
-        const coreMessages = messages.map(m => ({
-            role: m.role as 'user' | 'assistant' | 'system',
-            content: m.content
-        }));
+        // Convert UI messages to core messages format
+        const coreMessages = messages.map(m => {
+            // Handle AI SDK v3 UIMessage format with parts
+            if (m.parts && Array.isArray(m.parts)) {
+                const textContent = m.parts
+                    .filter((p: any) => p.type === 'text')
+                    .map((p: any) => p.text)
+                    .join('');
+                return {
+                    role: m.role as 'user' | 'assistant' | 'system',
+                    content: textContent
+                };
+            }
+            // Handle legacy format with content string
+            return {
+                role: m.role as 'user' | 'assistant' | 'system',
+                content: m.content || ''
+            };
+        });
 
         // Iterate through configured providers for this model
         for (const provider of modelConfig.providers) {
@@ -50,11 +64,13 @@ export async function POST(request: Request) {
                             model: cerebras(provider.id),
                             messages: coreMessages,
                             system: 'You are a helpful AI assistant.',
-                            // Abort if connection takes > 10s
                             abortSignal: AbortSignal.timeout(10000),
                         });
 
-                        return result.toTextStreamResponse();
+                        // Return AI SDK v3 compatible response
+                        return createUIMessageStreamResponse({
+                            stream: result.toUIMessageStream(),
+                        });
                     } catch (e) {
                         console.error('Cerebras Error:', e);
                         lastError = e as Error;
@@ -83,11 +99,13 @@ export async function POST(request: Request) {
                             system: webSearch
                                 ? 'You have access to web search. Use current information when relevant.'
                                 : 'You are a helpful AI assistant.',
-                            // Abort if connection takes > 10s
                             abortSignal: AbortSignal.timeout(10000),
                         });
 
-                        return result.toTextStreamResponse();
+                        // Return AI SDK v3 compatible response
+                        return createUIMessageStreamResponse({
+                            stream: result.toUIMessageStream(),
+                        });
                     } catch (e) {
                         console.error('OpenRouter Error:', e);
                         lastError = e as Error;
