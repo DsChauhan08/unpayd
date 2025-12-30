@@ -21,7 +21,7 @@ export const MODELS = {
         description: 'Fast responses for simple tasks',
         providers: [
             { name: 'cerebras', id: 'llama3.1-8b' },
-            { name: 'openrouter', id: 'meta-llama/llama-3.1-8b-instruct' }
+            { name: 'openrouter', id: 'meta-llama/llama-3.1-8b-instruct:free' }
         ]
     },
     general: {
@@ -30,7 +30,7 @@ export const MODELS = {
         description: 'Versatile AI for everyday conversations',
         providers: [
             { name: 'cerebras', id: 'llama-3.3-70b' },
-            { name: 'openrouter', id: 'meta-llama/llama-3.3-70b-instruct' }
+            { name: 'openrouter', id: 'meta-llama/llama-3.3-70b-instruct:free' }
         ]
     },
     code: {
@@ -39,16 +39,16 @@ export const MODELS = {
         description: 'Specialized for programming tasks',
         providers: [
             { name: 'cerebras', id: 'qwen-3-32b' },
-            { name: 'openrouter', id: 'qwen/qwen-2.5-32b-instruct' } // Fallback for Qwen 3 if available, or similar
+            { name: 'openrouter', id: 'qwen/qwen3-32b:free' }
         ]
     },
     deepthink: {
-        name: 'Deep Think (GPT OSS 120B)',
+        name: 'Deep Think (DeepSeek R1)',
         icon: '🧠',
         description: 'Complex reasoning and analysis',
         providers: [
-            { name: 'cerebras', id: 'gpt-oss-120b' },
-            // Add OpenRouter fallback if known, otherwise just Cerebras
+            { name: 'openrouter', id: 'deepseek/deepseek-r1:free' },
+            { name: 'cerebras', id: 'llama-3.3-70b' }
         ]
     },
     // Explicit Models
@@ -58,7 +58,7 @@ export const MODELS = {
         description: '8B Parameters - Fast',
         providers: [
             { name: 'cerebras', id: 'llama3.1-8b' },
-            { name: 'openrouter', id: 'meta-llama/llama-3.1-8b-instruct' }
+            { name: 'openrouter', id: 'meta-llama/llama-3.1-8b-instruct:free' }
         ]
     },
     'llama-3.3-70b': {
@@ -67,7 +67,7 @@ export const MODELS = {
         description: '70B Parameters - High Performance',
         providers: [
             { name: 'cerebras', id: 'llama-3.3-70b' },
-            { name: 'openrouter', id: 'meta-llama/llama-3.3-70b-instruct' }
+            { name: 'openrouter', id: 'meta-llama/llama-3.3-70b-instruct:free' }
         ]
     },
     'qwen-3-32b': {
@@ -76,32 +76,15 @@ export const MODELS = {
         description: '32B Parameters',
         providers: [
             { name: 'cerebras', id: 'qwen-3-32b' },
-            { name: 'openrouter', id: 'qwen/qwen-2.5-32b-instruct' }
+            { name: 'openrouter', id: 'qwen/qwen3-32b:free' }
         ]
     },
     'gpt-oss-120b': {
         name: 'GPT OSS 120B',
         icon: '🤖',
-        description: '120B Parameters',
+        description: '120B Parameters - Cerebras Only',
         providers: [
             { name: 'cerebras', id: 'gpt-oss-120b' }
-        ]
-    },
-    // Preview Models
-    'qwen-3-235b': {
-        name: 'Qwen 3 235B (Preview)',
-        icon: '🧪',
-        description: '235B Parameters - Preview',
-        providers: [
-            { name: 'cerebras', id: 'qwen-3-235b-a22b-instruct-2507' }
-        ]
-    },
-    'zai-glm-4.6': {
-        name: 'Z.ai GLM 4.6 (Preview)',
-        icon: '🧪',
-        description: '357B Parameters - Preview',
-        providers: [
-            { name: 'cerebras', id: 'zai-glm-4.6' }
         ]
     }
 } as const;

@@ -63,10 +63,12 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
     const [showArchived, setShowArchived] = useState(false);
 
     const fetchChats = async () => {
-        if (!isAuthenticated) return;
+        if (!isAuthenticated || !user?.id) return;
         try {
-            const data: any = await nhost.graphql.request(GET_CHATS);
-            const mappedChats = data.chats.map((c: any) => ({
+            const response: any = await nhost.graphql.request(GET_CHATS);
+            // Handle both response formats: { data: { chats } } or { chats }
+            const chatsData = response?.data?.chats || response?.chats || [];
+            const mappedChats = chatsData.map((c: any) => ({
                 id: c.id,
                 title: c.title,
                 model: c.model,
@@ -75,6 +77,8 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
             setChats(mappedChats);
         } catch (error) {
             console.error('Failed to fetch chats:', error);
+            // Don't crash, just show empty state
+            setChats([]);
         }
     };
 
