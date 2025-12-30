@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { useChat as useAiChat } from 'ai/react';
+import { useChat as useAiChat } from '@ai-sdk/react';
 import type { Message as DbMessage, ModelKey } from '@/types';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
