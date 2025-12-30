@@ -36,7 +36,7 @@ export default function SignupPage() {
             return;
         }
 
-        const { isError, error, isSuccess } = await signUpEmailPassword(email, password, {
+        const { isError, error, isSuccess, needsEmailVerification } = await signUpEmailPassword(email, password, {
             displayName: name,
             metadata: { name }
         });
@@ -47,7 +47,12 @@ export default function SignupPage() {
         }
 
         if (isSuccess) {
-            setSuccess(true);
+            if (needsEmailVerification) {
+                setSuccess(true);
+            } else {
+                toast.success('Account created!');
+                router.push('/chat');
+            }
         }
     };
 
@@ -106,7 +111,7 @@ export default function SignupPage() {
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
                                 <label htmlFor="name" className="block text-sm font-medium text-zinc-400 mb-2">
-                                    Name <span className="text-zinc-600">(optional)</span>
+                                    Name
                                 </label>
                                 <Input
                                     id="name"
@@ -116,6 +121,7 @@ export default function SignupPage() {
                                     placeholder="Your name"
                                     className="bg-zinc-900 border-zinc-800 focus:border-zinc-700"
                                     disabled={isLoading}
+                                    required
                                 />
                             </div>
 
