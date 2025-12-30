@@ -1,19 +1,21 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
-import type { Message, ModelKey } from '@/types';
+import { useState, useCallback, useEffect } from 'react';
+import { useChat as useAiChat } from 'ai/react';
+import type { Message as DbMessage, ModelKey } from '@/types';
 import { useAuth } from './useAuth';
+import { toast } from 'sonner';
 
 interface UseChatOptions {
-    initialMessages?: Message[];
+    initialMessages?: DbMessage[];
     initialModel?: ModelKey;
     chatId?: string;
 }
 
 interface UseChatReturn {
-    messages: Message[];
+    messages: DbMessage[];
     isLoading: boolean;
-    isStreaming: boolean;
+    isStreaming: boolean; // Alias for isLoading in ai/react
     error: string | null;
     currentModel: ModelKey;
     webSearchEnabled: boolean;
@@ -27,17 +29,44 @@ interface UseChatReturn {
 
 export function useChat(options: UseChatOptions = {}): UseChatReturn {
     const { initialMessages = [], initialModel = 'general', chatId: initialChatId } = options;
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, user } = useAuth();
 
-    const [messages, setMessages] = useState<Message[]>(initialMessages);
     const [chatId, setChatId] = useState<string | null>(initialChatId || null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [isStreaming, setIsStreaming] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [currentModel, setCurrentModel] = useState<ModelKey>(initialModel);
     const [webSearchEnabled, setWebSearchEnabled] = useState(false);
 
-    const abortControllerRef = useRef<AbortController | null>(null);
+    // Use standard AI SDK hook
+    const {
+        messages: aiMessages,
+        input,
+        handleInputChange,
+        handleSubmit,
+        isLoading,
+        stop,
+        setMessages: setAiMessages,
+        error: aiError,
+        append // Added append for programmatic message sending
+    } = useAiChat({
+        api: '/api/chat',
+        initialMessages: initialMessages as any, // Cast types as DB Message !== AI SDK Message exactly
+        body: {
+            model: currentModel,
+            webSearch: webSearchEnabled,
+        },
+        onError: (err) => {
+            console.error('AI Chat Error:', err);
+            toast.error(err.message || 'Failed to send message');
+        },
+        onFinish: async (message) => {
+            // Save Assistant Message to Turso
+            if (chatId && isAuthenticated) {
+                await saveMessageToDb(chatId, 'assistant', message.content);
+            }
+        }
+    });
+
+    // We must manually cast AI SDK messages to our DB Message type for consumption
+    const messages = aiMessages as unknown as DbMessage[];
 
     const saveMessageToDb = async (currentChatId: string, role: 'user' | 'assistant', content: string) => {
         if (!isAuthenticated) return;
@@ -59,15 +88,11 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     };
 
     const sendMessage = useCallback(async (content: string, files?: File[]) => {
-        if (!content.trim() && (!files || files.length === 0)) return;
+        if (!content.trim()) return;
 
-        setError(null);
-        setIsLoading(true);
-
-        // Initialize ChatDB ID if needed
         let currentChatId = chatId;
-        const { user } = useAuth(); // Get user from context to pass to API
 
+        // Create Chat if not exists
         if (!currentChatId && isAuthenticated && user) {
             try {
                 currentChatId = crypto.randomUUID();
@@ -84,142 +109,43 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                 });
 
                 setChatId(currentChatId);
-                // Update URL without reload
                 window.history.pushState({}, '', `/chat/${currentChatId}`);
             } catch (err) {
                 console.error('Failed to create chat:', err);
             }
         }
 
-        // Add user message
-        const userMessage: Message = {
-            id: crypto.randomUUID(),
-            chatId: currentChatId || '',
+        // Save User Message to DB immediately
+        if (currentChatId && isAuthenticated) {
+            await saveMessageToDb(currentChatId, 'user', content);
+        }
+
+        // Trigger AI SDK submit using append
+        append({
+            id: crypto.randomUUID(), // AI SDK will generate its own ID, but we can provide one
             role: 'user',
-            content: content.trim(),
-            files: files?.map((f) => ({
-                id: crypto.randomUUID(),
-                name: f.name,
-                type: f.type,
-                url: URL.createObjectURL(f),
-                size: f.size,
-            })),
-            createdAt: new Date(),
-        };
+            content: content,
+            // files: files // AI SDK doesn't directly support files in append, would need custom handling
+        });
 
-        setMessages((prev) => [...prev, userMessage]);
-        if (currentChatId) await saveMessageToDb(currentChatId, 'user', userMessage.content);
-
-        // Prepare assistant message placeholder
-        const assistantMessageId = crypto.randomUUID();
-        const assistantMessage: Message = {
-            id: assistantMessageId,
-            chatId: currentChatId || '',
-            role: 'assistant',
-            content: '',
-            createdAt: new Date(),
-        };
-
-        setMessages((prev) => [...prev, assistantMessage]);
-        setIsStreaming(true);
-
-        try {
-            abortControllerRef.current = new AbortController();
-
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    messages: [...messages, userMessage].map((m) => ({
-                        role: m.role,
-                        content: m.content,
-                    })),
-                    model: currentModel,
-                    webSearch: webSearchEnabled,
-                }),
-                signal: abortControllerRef.current.signal,
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to get response');
-            }
-
-            const reader = response.body?.getReader();
-            if (!reader) throw new Error('No response body');
-
-            const decoder = new TextDecoder();
-            let fullText = '';
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n').filter((line) => line.startsWith('data: '));
-
-                for (const line of lines) {
-                    const data = line.slice(6);
-                    if (data === '[DONE]') continue;
-
-                    try {
-                        const parsed = JSON.parse(data);
-                        const token = parsed.token || '';
-                        if (token) {
-                            fullText += token;
-                            setMessages((prev) =>
-                                prev.map((m) =>
-                                    m.id === assistantMessageId
-                                        ? { ...m, content: fullText }
-                                        : m
-                                )
-                            );
-                        }
-                    } catch {
-                        // Skip unparseable chunks
-                    }
-                }
-            }
-
-            if (currentChatId) await saveMessageToDb(currentChatId, 'assistant', fullText);
-
-        } catch (err) {
-            if ((err as Error).name !== 'AbortError') {
-                setError((err as Error).message);
-                setMessages((prev) => prev.filter((m) => m.id !== assistantMessageId));
-            }
-        } finally {
-            setIsLoading(false);
-            setIsStreaming(false);
-            abortControllerRef.current = null;
-        }
-    }, [messages, currentModel, webSearchEnabled, chatId, isAuthenticated]);
-
-    const stopStreaming = useCallback(() => {
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
-        }
-    }, []);
-
-    const clearMessages = useCallback(() => {
-        setMessages([]);
-        setChatId(null);
-        setError(null);
-        window.history.pushState({}, '', '/chat');
-    }, []);
+    }, [chatId, currentModel, isAuthenticated, user, append]);
 
     return {
         messages,
         isLoading,
-        isStreaming,
-        error,
+        isStreaming: isLoading,
+        error: aiError?.message || null,
         currentModel,
         webSearchEnabled,
         chatId,
         setCurrentModel,
         setWebSearchEnabled,
         sendMessage,
-        clearMessages,
-        stopStreaming,
+        clearMessages: () => {
+            setAiMessages([]);
+            setChatId(null);
+            window.history.pushState({}, '', '/chat');
+        },
+        stopStreaming: stop
     };
 }

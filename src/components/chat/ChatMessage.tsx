@@ -103,8 +103,13 @@ export const ChatMessage = memo(function ChatMessage({
                         : "bg-transparent text-zinc-100"
                 )}>
                     <div className="prose prose-invert prose-sm max-w-none">
-                        {renderContent(content)}
-                        {isStreaming && (
+                        {content ? renderContent(content) : isStreaming && (
+                            <div className="flex items-center space-x-2 text-zinc-500 italic">
+                                <Sparkles className="w-3 h-3 animate-spin" />
+                                <span>Thinking...</span>
+                            </div>
+                        )}
+                        {isStreaming && content && (
                             <span className="inline-block w-2 h-4 ml-1 bg-white/80 cursor-blink" />
                         )}
                     </div>
