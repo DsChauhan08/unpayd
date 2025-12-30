@@ -1,6 +1,6 @@
 import { MODELS, getCerebrasKeys, getOpenRouterKeys, type ModelKey, type ChatMessage } from '@/lib/openrouter';
 import { createOpenAI } from '@ai-sdk/openai';
-import { streamText, convertToCoreMessages } from 'ai';
+import { streamText } from 'ai';
 
 export const runtime = 'edge';
 // constant max duration for Vercel
@@ -25,7 +25,12 @@ export async function POST(request: Request) {
         }
 
         let lastError: Error | null = null;
-        const coreMessages = convertToCoreMessages(messages);
+
+        // Manual conversion to CoreMessage to avoid import issues
+        const coreMessages = messages.map(m => ({
+            role: m.role as 'user' | 'assistant' | 'system',
+            content: m.content
+        }));
 
         // Iterate through configured providers for this model
         for (const provider of modelConfig.providers) {
