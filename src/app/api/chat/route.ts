@@ -9,7 +9,7 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { messages, model = 'general', webSearch = false } = body as {
+        let { messages, model = 'general', webSearch = false } = body as {
             messages: any[];
             model: ModelKey;
             webSearch: boolean;
@@ -17,6 +17,19 @@ export async function POST(request: Request) {
 
         if (!messages || !Array.isArray(messages)) {
             return new Response(JSON.stringify({ error: 'Messages are required' }), { status: 400 });
+        }
+
+        // Check if any message has image content
+        const hasImages = messages.some(m => 
+            m.parts?.some((p: any) => 
+                p.type === 'file' && p.mimeType?.startsWith('image/')
+            )
+        );
+
+        // Auto-switch to vision model if images are present
+        if (hasImages) {
+            console.log('[Chat API] Images detected, switching to vision model');
+            model = 'vision' as ModelKey;
         }
 
         const modelConfig = MODELS[model];
@@ -27,17 +40,40 @@ export async function POST(request: Request) {
         let lastError: Error | null = null;
         const errors: string[] = [];
 
-        // Convert UI messages to core messages format
+        // Convert UI messages to core messages format with image support
         const coreMessages = messages.map(m => {
             // Handle AI SDK v3 UIMessage format with parts
             if (m.parts && Array.isArray(m.parts)) {
-                const textContent = m.parts
-                    .filter((p: any) => p.type === 'text')
-                    .map((p: any) => p.text)
-                    .join('');
+                const content: Array<{ type: 'text'; text: string } | { type: 'image'; image: string }> = [];
+                
+                for (const p of m.parts) {
+                    if (p.type === 'text' && p.text) {
+                        content.push({ type: 'text', text: p.text });
+                    } else if (p.type === 'file' && p.mimeType?.startsWith('image/')) {
+                        // Handle file attachments (images)
+                        content.push({ type: 'image', image: p.url || p.data });
+                    }
+                }
+                
+                // If only text, return simple format
+                if (content.length === 1 && content[0].type === 'text') {
+                    return {
+                        role: m.role as 'user' | 'assistant' | 'system',
+                        content: content[0].text
+                    };
+                }
+                
+                // If has images, return multi-part content
+                if (content.length > 0) {
+                    return {
+                        role: m.role as 'user' | 'assistant' | 'system',
+                        content: content
+                    };
+                }
+                
                 return {
                     role: m.role as 'user' | 'assistant' | 'system',
-                    content: textContent
+                    content: ''
                 };
             }
             // Handle legacy format with content string
@@ -109,13 +145,23 @@ export async function POST(request: Request) {
                             }
                         });
 
+                        // Build provider config with optional web search
+                        const providerConfig: Record<string, any> = {};
+                        if (webSearch) {
+                            // OpenRouter web search plugin
+                            providerConfig.openrouter = {
+                                plugins: [{ id: 'web' }]
+                            };
+                        }
+
                         const result = await streamText({
                             // Use .chat() to force chat completions endpoint
                             model: openrouter.chat(provider.id),
                             messages: coreMessages,
                             system: webSearch
-                                ? 'You have access to web search. Use current information when relevant.'
+                                ? 'You have access to web search. When answering questions, use the search results to provide accurate, up-to-date information. Always cite your sources when using web search results.'
                                 : 'You are a helpful AI assistant.',
+                            ...(webSearch ? { experimental_providerMetadata: providerConfig } : {})
                         });
 
                         console.log(`[Chat API] OpenRouter success with model ${provider.id}`);

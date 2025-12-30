@@ -22,6 +22,7 @@ const modelOrder: ModelKey[] = [
     'general',
     'code',
     'deepthink',
+    'vision',
     'llama-3.1-8b',
     'llama-3.3-70b',
     'qwen-3-32b',

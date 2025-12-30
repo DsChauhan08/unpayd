@@ -69,8 +69,15 @@ export const ChatMessage = memo(function ChatMessage({
     };
 
     const renderInlineFormatting = (text: string) => {
+        // Images first (before links to avoid conflicts)
+        let formatted = text.replace(
+            /!\[([^\]]*)\]\(([^)]+)\)/g, 
+            '<img src="$2" alt="$1" class="max-w-full rounded-lg my-2 max-h-96 object-contain" />'
+        );
         // Bold
-        let formatted = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        // Italic
+        formatted = formatted.replace(/\*([^*]+)\*/g, '<em>$1</em>');
         // Inline code
         formatted = formatted.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 text-sm font-mono">$1</code>');
         // Links

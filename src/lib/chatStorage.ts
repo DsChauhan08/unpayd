@@ -7,7 +7,22 @@ export interface StoredChat {
     model: string;
     createdAt: number;
     updatedAt: number;
+    archived?: boolean;
 }
+
+// Settings storage
+export interface AppSettings {
+    theme: 'dark' | 'light' | 'system';
+    defaultModel: string;
+    fontSize: 'small' | 'medium' | 'large';
+}
+
+const SETTINGS_KEY = 'unpayd_settings';
+const DEFAULT_SETTINGS: AppSettings = {
+    theme: 'dark',
+    defaultModel: 'general',
+    fontSize: 'medium'
+};
 
 export interface StoredMessage {
     id: string;
@@ -110,4 +125,74 @@ export function saveMessage(message: StoredMessage): void {
 export function getChatById(chatId: string): StoredChat | null {
     const chats = getStoredChats();
     return chats.find(c => c.id === chatId) || null;
+}
+
+export function archiveChat(chatId: string): void {
+    if (!isBrowser) return;
+    try {
+        const chats = getStoredChats();
+        const chat = chats.find(c => c.id === chatId);
+        if (chat) {
+            chat.archived = true;
+            chat.updatedAt = Date.now();
+            localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
+        }
+    } catch (err) {
+        console.error('Failed to archive chat:', err);
+    }
+}
+
+export function unarchiveChat(chatId: string): void {
+    if (!isBrowser) return;
+    try {
+        const chats = getStoredChats();
+        const chat = chats.find(c => c.id === chatId);
+        if (chat) {
+            chat.archived = false;
+            chat.updatedAt = Date.now();
+            localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
+        }
+    } catch (err) {
+        console.error('Failed to unarchive chat:', err);
+    }
+}
+
+export function getArchivedChats(): StoredChat[] {
+    return getStoredChats().filter(c => c.archived === true);
+}
+
+export function getActiveChats(): StoredChat[] {
+    return getStoredChats().filter(c => !c.archived);
+}
+
+export function getSettings(): AppSettings {
+    if (!isBrowser) return DEFAULT_SETTINGS;
+    try {
+        const data = localStorage.getItem(SETTINGS_KEY);
+        return data ? { ...DEFAULT_SETTINGS, ...JSON.parse(data) } : DEFAULT_SETTINGS;
+    } catch {
+        return DEFAULT_SETTINGS;
+    }
+}
+
+export function saveSettings(settings: Partial<AppSettings>): void {
+    if (!isBrowser) return;
+    try {
+        const current = getSettings();
+        const updated = { ...current, ...settings };
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
+    } catch (err) {
+        console.error('Failed to save settings:', err);
+    }
+}
+
+export function clearAllData(): void {
+    if (!isBrowser) return;
+    try {
+        localStorage.removeItem(CHATS_KEY);
+        localStorage.removeItem(MESSAGES_KEY);
+        localStorage.removeItem(SETTINGS_KEY);
+    } catch (err) {
+        console.error('Failed to clear data:', err);
+    }
 }

@@ -19,6 +19,7 @@ export const MODELS = {
         name: 'Quick (Llama 3.1 8B)',
         icon: '⚡',
         description: 'Fast responses for simple tasks',
+        supportsVision: false,
         providers: [
             { name: 'cerebras', id: 'llama3.1-8b' },
             { name: 'openrouter', id: 'meta-llama/llama-3.1-8b-instruct:free' }
@@ -28,6 +29,7 @@ export const MODELS = {
         name: 'General (Llama 3.3 70B)',
         icon: '💬',
         description: 'Versatile AI for everyday conversations',
+        supportsVision: false,
         providers: [
             { name: 'cerebras', id: 'llama-3.3-70b' },
             { name: 'openrouter', id: 'meta-llama/llama-3.3-70b-instruct:free' }
@@ -37,6 +39,7 @@ export const MODELS = {
         name: 'Coding (Qwen 3 32B)',
         icon: '💻',
         description: 'Specialized for programming tasks',
+        supportsVision: false,
         providers: [
             { name: 'cerebras', id: 'qwen-3-32b' },
             { name: 'openrouter', id: 'qwen/qwen3-32b:free' }
@@ -46,9 +49,20 @@ export const MODELS = {
         name: 'Deep Think (DeepSeek R1)',
         icon: '🧠',
         description: 'Complex reasoning and analysis',
+        supportsVision: false,
         providers: [
             { name: 'openrouter', id: 'deepseek/deepseek-r1:free' },
             { name: 'cerebras', id: 'llama-3.3-70b' }
+        ]
+    },
+    // Vision-capable model for image analysis
+    vision: {
+        name: 'Vision (Llama 3.2 11B)',
+        icon: '👁️',
+        description: 'Analyze images and photos',
+        supportsVision: true,
+        providers: [
+            { name: 'openrouter', id: 'meta-llama/llama-3.2-11b-vision-instruct:free' }
         ]
     },
     // Explicit Models
@@ -56,6 +70,7 @@ export const MODELS = {
         name: 'Llama 3.1 8B',
         icon: '🦙',
         description: '8B Parameters - Fast',
+        supportsVision: false,
         providers: [
             { name: 'cerebras', id: 'llama3.1-8b' },
             { name: 'openrouter', id: 'meta-llama/llama-3.1-8b-instruct:free' }
@@ -65,6 +80,7 @@ export const MODELS = {
         name: 'Llama 3.3 70B',
         icon: '🦙',
         description: '70B Parameters - High Performance',
+        supportsVision: false,
         providers: [
             { name: 'cerebras', id: 'llama-3.3-70b' },
             { name: 'openrouter', id: 'meta-llama/llama-3.3-70b-instruct:free' }
@@ -74,6 +90,7 @@ export const MODELS = {
         name: 'Qwen 3 32B',
         icon: '🤖',
         description: '32B Parameters',
+        supportsVision: false,
         providers: [
             { name: 'cerebras', id: 'qwen-3-32b' },
             { name: 'openrouter', id: 'qwen/qwen3-32b:free' }
@@ -83,6 +100,7 @@ export const MODELS = {
         name: 'GPT OSS 120B',
         icon: '🤖',
         description: '120B Parameters - Cerebras Only',
+        supportsVision: false,
         providers: [
             { name: 'cerebras', id: 'gpt-oss-120b' }
         ]
@@ -92,6 +110,7 @@ export const MODELS = {
         name: 'Qwen 3 235B',
         icon: '🧪',
         description: '235B Parameters - Preview',
+        supportsVision: false,
         providers: [
             { name: 'cerebras', id: 'qwen-3-235b-a22b-instruct-2507' }
         ]
@@ -100,6 +119,7 @@ export const MODELS = {
         name: 'Z.ai GLM 4.6',
         icon: '🧪',
         description: '357B Parameters - Preview',
+        supportsVision: false,
         providers: [
             { name: 'cerebras', id: 'zai-glm-4.6' }
         ]

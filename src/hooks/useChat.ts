@@ -28,11 +28,13 @@ interface UseChatReturn {
     currentModel: ModelKey;
     webSearchEnabled: boolean;
     chatId: string | null;
+    generatedImage: string | null;
     setCurrentModel: (model: ModelKey) => void;
     setWebSearchEnabled: (enabled: boolean) => void;
     sendMessage: (content: string, files?: File[]) => Promise<void>;
     clearMessages: () => void;
     stopStreaming: () => void;
+    clearGeneratedImage: () => void;
 }
 
 export function useChat(options: UseChatOptions = {}): UseChatReturn {
@@ -42,6 +44,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     const [chatId, setChatId] = useState<string | null>(initialChatId || null);
     const [currentModel, setCurrentModel] = useState<ModelKey>(initialModel);
     const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+    const [generatedImage, setGeneratedImage] = useState<string | null>(null);
 
     // Load messages from localStorage if we have a chatId
     const storedMessages = useMemo(() => {
@@ -148,11 +151,78 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     };
 
     const sendMessage = useCallback(async (content: string, files?: File[]) => {
-        if (!content.trim()) return;
+        if (!content.trim() && (!files || files.length === 0)) return;
+
+        // Check for /image command
+        if (content.trim().toLowerCase().startsWith('/image ')) {
+            const imagePrompt = content.trim().slice(7).trim();
+            if (!imagePrompt) {
+                toast.error('Please provide an image description after /image');
+                return;
+            }
+
+            // Generate image using Pollinations API
+            try {
+                toast.info('🎨 Generating image...');
+                const response = await fetch('/api/image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: imagePrompt })
+                });
+
+                const data = await response.json();
+                if (data.success && data.imageUrl) {
+                    setGeneratedImage(data.imageUrl);
+                    toast.success('Image generated!');
+                    
+                    // Also add as a message in chat
+                    let currentChatId = chatId;
+                    if (!currentChatId) {
+                        currentChatId = crypto.randomUUID();
+                        saveChat({
+                            id: currentChatId,
+                            title: `Image: ${imagePrompt.slice(0, 30)}...`,
+                            model: currentModel,
+                            createdAt: Date.now(),
+                            updatedAt: Date.now()
+                        });
+                        setChatId(currentChatId);
+                        window.history.pushState({}, '', `/chat/${currentChatId}`);
+                    }
+                    
+                    // Save user's prompt
+                    saveMessage({
+                        id: crypto.randomUUID(),
+                        chatId: currentChatId,
+                        role: 'user',
+                        content: content,
+                        createdAt: Date.now()
+                    });
+                    
+                    // Save the generated image as assistant message
+                    saveMessage({
+                        id: crypto.randomUUID(),
+                        chatId: currentChatId,
+                        role: 'assistant',
+                        content: `![Generated Image](${data.imageUrl})\n\n*Generated image for: "${imagePrompt}"*`,
+                        createdAt: Date.now()
+                    });
+                    
+                    // Force refresh messages
+                    window.location.reload();
+                } else {
+                    toast.error(data.error || 'Failed to generate image');
+                }
+            } catch (err) {
+                console.error('Image generation error:', err);
+                toast.error('Failed to generate image');
+            }
+            return;
+        }
 
         let currentChatId = chatId;
 
-        // Create Chat if not exists
+        // Create Chat if not exists - do this FIRST before sending
         if (!currentChatId) {
             currentChatId = crypto.randomUUID();
             const chatTitle = content.slice(0, 50) + (content.length > 50 ? '...' : '');
@@ -166,26 +236,23 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                 updatedAt: Date.now()
             });
 
+            // Set chat ID immediately before any async operations
             setChatId(currentChatId);
             window.history.pushState({}, '', `/chat/${currentChatId}`);
 
-            // Also try to save to backend if authenticated
+            // Also try to save to backend if authenticated (non-blocking)
             if (isAuthenticated && user) {
-                try {
-                    await fetch('/api/chats', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            id: currentChatId,
-                            userId: user.id,
-                            title: chatTitle,
-                            model: currentModel,
-                            createdAt: Date.now()
-                        })
-                    });
-                } catch (err) {
-                    console.error('Failed to create chat in backend:', err);
-                }
+                fetch('/api/chats', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: currentChatId,
+                        userId: user.id,
+                        title: chatTitle,
+                        model: currentModel,
+                        createdAt: Date.now()
+                    })
+                }).catch(err => console.error('Failed to create chat in backend:', err));
             }
         }
 
@@ -199,15 +266,51 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             createdAt: Date.now()
         });
 
-        // Also try to save to backend if authenticated
+        // Also try to save to backend if authenticated (non-blocking)
         if (isAuthenticated) {
-            await saveMessageToBackend(currentChatId, 'user', content);
+            saveMessageToBackend(currentChatId, 'user', content).catch(() => {});
         }
 
-        // Trigger AI SDK submit
-        await sendAiMessage({ text: content });
+        // Convert files to FileUIPart format for image attachments
+        const attachments: Array<{ type: 'file'; mediaType: string; url: string }> = [];
+        if (files && files.length > 0) {
+            for (const file of files) {
+                if (file.type.startsWith('image/')) {
+                    try {
+                        const base64 = await fileToBase64(file);
+                        attachments.push({
+                            type: 'file',
+                            mediaType: file.type,
+                            url: base64
+                        });
+                    } catch (err) {
+                        console.error('Failed to convert file to base64:', err);
+                    }
+                }
+            }
+        }
+
+        // Trigger AI SDK submit with text and optional image attachments
+        if (attachments.length > 0) {
+            await sendAiMessage({ 
+                text: content || 'What is in this image?',
+                files: attachments
+            });
+        } else {
+            await sendAiMessage({ text: content });
+        }
 
     }, [chatId, currentModel, isAuthenticated, user, sendAiMessage]);
+
+    // Helper function to convert File to base64
+    const fileToBase64 = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    };
 
     return {
         messages,
@@ -217,14 +320,17 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         currentModel,
         webSearchEnabled,
         chatId,
+        generatedImage,
         setCurrentModel,
         setWebSearchEnabled,
         sendMessage,
         clearMessages: () => {
             setAiMessages([]);
             setChatId(null);
+            setGeneratedImage(null);
             window.history.pushState({}, '', '/chat');
         },
-        stopStreaming: stop
+        stopStreaming: stop,
+        clearGeneratedImage: () => setGeneratedImage(null)
     };
 }

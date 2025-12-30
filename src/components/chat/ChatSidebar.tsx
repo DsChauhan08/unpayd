@@ -8,7 +8,14 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { nhost } from '@/lib/nhost';
 import { GET_CHATS } from '@/lib/graphql';
-import { getStoredChats, deleteChat as deleteStoredChat } from '@/lib/chatStorage';
+import { 
+    getActiveChats, 
+    getArchivedChats,
+    deleteChat as deleteStoredChat,
+    archiveChat,
+    unarchiveChat
+} from '@/lib/chatStorage';
+import { SettingsDialog } from './SettingsDialog';
 import {
     Sidebar,
     SidebarContent,
@@ -33,6 +40,7 @@ import {
     Search,
     MessageSquare,
     Archive,
+    ArchiveRestore,
     Trash2,
     MoreHorizontal,
     ChevronDown,
@@ -49,6 +57,7 @@ interface ChatItem {
     title: string | null;
     model: string;
     updatedAt: Date;
+    archived?: boolean;
 }
 
 interface ChatSidebarProps {
@@ -62,14 +71,16 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
     const [chats, setChats] = useState<ChatItem[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [showArchived, setShowArchived] = useState(false);
+    const [settingsOpen, setSettingsOpen] = useState(false);
 
     const fetchChats = async () => {
-        // First, try to get chats from localStorage (always available)
-        const localChats = getStoredChats().map(c => ({
+        // Get chats based on current view (archived or active)
+        const localChats = (showArchived ? getArchivedChats() : getActiveChats()).map(c => ({
             id: c.id,
             title: c.title,
             model: c.model,
-            updatedAt: new Date(c.updatedAt)
+            updatedAt: new Date(c.updatedAt),
+            archived: c.archived
         }));
 
         // If user is authenticated, try to fetch from backend
@@ -105,7 +116,7 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
 
     useEffect(() => {
         fetchChats();
-    }, [isAuthenticated, pathname, user?.id]);
+    }, [isAuthenticated, pathname, user?.id, showArchived]);
 
     // Refresh chats when path changes (new chat created)
     useEffect(() => {
@@ -119,7 +130,7 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
             window.removeEventListener('storage', handleStorageChange);
             clearInterval(interval);
         };
-    }, [isAuthenticated, user?.id]);
+    }, [isAuthenticated, user?.id, showArchived]);
 
     const handleNewChat = () => {
         if (onNewChat) {
@@ -134,6 +145,19 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
         if (pathname === `/chat/${chatId}`) {
             router.push('/chat');
         }
+    };
+
+    const handleArchiveChat = (chatId: string) => {
+        archiveChat(chatId);
+        fetchChats();
+        if (pathname === `/chat/${chatId}`) {
+            router.push('/chat');
+        }
+    };
+
+    const handleUnarchiveChat = (chatId: string) => {
+        unarchiveChat(chatId);
+        fetchChats();
     };
 
     const handleLogout = () => {
@@ -201,6 +225,22 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
 
             <SidebarContent>
                 <ScrollArea className="flex-1">
+                    {/* Archive Toggle */}
+                    <div className="px-3 py-2">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowArchived(!showArchived)}
+                            className={cn(
+                                "w-full justify-start gap-2 text-sm",
+                                showArchived ? "text-blue-400" : "text-zinc-500"
+                            )}
+                        >
+                            <Archive className="w-4 h-4" />
+                            {showArchived ? 'Show Active Chats' : 'Show Archived'}
+                        </Button>
+                    </div>
+
                     {/* Chat History */}
                     {Object.entries(groupedChats).map(([date, chatGroup]) => (
                         <SidebarGroup key={date}>
@@ -211,37 +251,63 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
                                 <SidebarMenu>
                                     {chatGroup.map((chat) => (
                                         <SidebarMenuItem key={chat.id}>
-                                            <div className="flex items-center group">
+                                            <div className="flex items-center group w-full">
                                                 <SidebarMenuButton
                                                     asChild
                                                     isActive={pathname === `/chat/${chat.id}`}
-                                                    className="flex-1 truncate"
+                                                    className="flex-1 min-w-0 pr-1"
                                                 >
-                                                    <Link href={`/chat/${chat.id}`}>
+                                                    <Link href={`/chat/${chat.id}`} className="flex items-center gap-2 w-full">
                                                         <MessageSquare className="w-4 h-4 shrink-0" />
-                                                        <span className="truncate">
+                                                        <span className="truncate text-sm max-w-[120px]">
                                                             {chat.title || 'New Chat'}
                                                         </span>
                                                     </Link>
                                                 </SidebarMenuButton>
 
+                                                {/* Quick delete button on hover */}
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleDeleteChat(chat.id);
+                                                    }}
+                                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0 text-zinc-500 hover:text-red-400 hover:bg-red-400/10"
+                                                >
+                                                    <Trash2 className="w-3 h-3" />
+                                                </Button>
+
+                                                {/* More options dropdown */}
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild>
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            className="h-7 w-7 opacity-0 group-hover:opacity-100 shrink-0"
+                                                            className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0"
                                                         >
-                                                            <MoreHorizontal className="w-4 h-4" />
+                                                            <MoreHorizontal className="w-3 h-3" />
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-800">
-                                                        <DropdownMenuItem
-                                                            className="text-zinc-400"
-                                                        >
-                                                            <Archive className="w-4 h-4 mr-2" />
-                                                            Archive
-                                                        </DropdownMenuItem>
+                                                        {showArchived ? (
+                                                            <DropdownMenuItem
+                                                                className="text-zinc-400"
+                                                                onClick={() => handleUnarchiveChat(chat.id)}
+                                                            >
+                                                                <ArchiveRestore className="w-4 h-4 mr-2" />
+                                                                Unarchive
+                                                            </DropdownMenuItem>
+                                                        ) : (
+                                                            <DropdownMenuItem
+                                                                className="text-zinc-400"
+                                                                onClick={() => handleArchiveChat(chat.id)}
+                                                            >
+                                                                <Archive className="w-4 h-4 mr-2" />
+                                                                Archive
+                                                            </DropdownMenuItem>
+                                                        )}
                                                         <DropdownMenuItem
                                                             className="text-red-400"
                                                             onClick={() => handleDeleteChat(chat.id)}
@@ -278,7 +344,7 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
                             <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center">
                                 <User className="w-4 h-4 text-zinc-300" />
                             </div>
-                            <div className="flex-1 text-left">
+                            <div className="flex-1 text-left min-w-0">
                                 <p className="text-sm font-medium text-white truncate">
                                     {user?.displayName || user?.email || 'User'}
                                 </p>
@@ -286,7 +352,7 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
                                     <p className="text-xs text-zinc-500 truncate">{user.email}</p>
                                 )}
                             </div>
-                            <ChevronDown className="w-4 h-4 text-zinc-500" />
+                            <ChevronDown className="w-4 h-4 text-zinc-500 shrink-0" />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
@@ -294,14 +360,17 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
                         side="top"
                         className="w-56 bg-zinc-900 border-zinc-800"
                     >
-                        <DropdownMenuItem className="text-zinc-400">
+                        <DropdownMenuItem 
+                            className="text-zinc-400 cursor-pointer"
+                            onClick={() => setSettingsOpen(true)}
+                        >
                             <Settings className="w-4 h-4 mr-2" />
                             Settings
                         </DropdownMenuItem>
                         <DropdownMenuSeparator className="bg-zinc-800" />
                         <DropdownMenuItem
                             onClick={handleLogout}
-                            className="text-red-400"
+                            className="text-red-400 cursor-pointer"
                         >
                             <LogOut className="w-4 h-4 mr-2" />
                             Log out
@@ -309,6 +378,9 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
                     </DropdownMenuContent>
                 </DropdownMenu>
             </SidebarFooter>
+
+            {/* Settings Dialog */}
+            <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
         </Sidebar>
     );
 }
