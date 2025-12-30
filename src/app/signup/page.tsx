@@ -38,7 +38,8 @@ export default function SignupPage() {
 
         const { isError, error, isSuccess, needsEmailVerification } = await signUpEmailPassword(email, password, {
             displayName: name,
-            metadata: { name }
+            metadata: { name },
+            redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/chat` : undefined
         });
 
         if (isError) {
