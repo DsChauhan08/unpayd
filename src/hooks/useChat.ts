@@ -251,8 +251,9 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                 updatedAt: Date.now()
             });
 
-            // Navigate to the new chat URL immediately
-            router.push(`/chat/${currentChatId}`);
+            // Update URL without triggering navigation (prevents component unmount)
+            // We'll do a proper navigation after the message is sent
+            window.history.replaceState({}, '', `/chat/${currentChatId}`);
 
             // Also try to save to backend if authenticated (non-blocking)
             if (isAuthenticated && user) {
@@ -268,6 +269,11 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                     })
                 }).catch(err => console.error('Failed to create chat in backend:', err));
             }
+            
+            // Update state immediately so onFinish callback can use correct chatId
+            setChatId(currentChatId);
+            setHasCreatedChat(true);
+            chatIdRef.current = currentChatId;
         }
 
         // Save User Message to localStorage
@@ -313,14 +319,9 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             }
         }
 
-        // Update chat ID state BEFORE sending (important for hook stability)
-        if (isNewChat) {
-            setChatId(currentChatId);
-            setHasCreatedChat(true);
-        }
-
         // Trigger AI SDK submit with text and optional image attachments
         try {
+            console.log(`[useChat] Sending message to AI, chatId: ${currentChatId}, hasImages: ${attachments.length > 0}`);
             if (attachments.length > 0) {
                 console.log(`[useChat] Sending message with ${attachments.length} image(s)`);
                 await sendAiMessage({ 
@@ -335,7 +336,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             toast.error('Failed to send message. Please try again.');
         }
 
-    }, [chatId, hasCreatedChat, currentModel, isAuthenticated, user, sendAiMessage, router]);
+    }, [chatId, hasCreatedChat, currentModel, isAuthenticated, user, sendAiMessage]);
 
     // Helper function to convert File to base64
     const fileToBase64 = (file: File): Promise<string> => {
