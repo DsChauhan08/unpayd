@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTheme } from 'next-themes';
 import {
     Dialog,
     DialogContent,
@@ -15,9 +16,9 @@ import {
     clearAllData,
     type AppSettings 
 } from '@/lib/chatStorage';
-import { MODELS, type ModelKey } from '@/lib/openrouter';
+import { MODELS } from '@/lib/openrouter';
 import { toast } from 'sonner';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Sun, Moon, Monitor } from 'lucide-react';
 
 interface SettingsDialogProps {
     open: boolean;
@@ -26,6 +27,7 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     const [settings, setSettings] = useState<AppSettings>(getSettings());
+    const { setTheme } = useTheme();
     
     useEffect(() => {
         if (open) {
@@ -35,6 +37,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
     const handleSave = () => {
         saveSettings(settings);
+        // Apply theme immediately using next-themes
+        setTheme(settings.theme);
         toast.success('Settings saved');
         onOpenChange(false);
     };
@@ -52,12 +56,18 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         label: `${model.icon} ${model.name}`
     }));
 
+    const themeOptions = [
+        { value: 'dark' as const, label: 'Dark', icon: Moon },
+        { value: 'light' as const, label: 'Light', icon: Sun },
+        { value: 'system' as const, label: 'System', icon: Monitor },
+    ];
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="bg-zinc-900 border-zinc-800 text-white max-w-md">
+            <DialogContent className="bg-card border-border text-foreground max-w-md">
                 <DialogHeader>
                     <DialogTitle>Settings</DialogTitle>
-                    <DialogDescription className="text-zinc-400">
+                    <DialogDescription className="text-muted-foreground">
                         Customize your Unpayd experience
                     </DialogDescription>
                 </DialogHeader>
@@ -65,13 +75,13 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <div className="space-y-6 py-4">
                     {/* Default Model */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium text-zinc-300">
+                        <label className="text-sm font-medium text-foreground">
                             Default Model
                         </label>
                         <select
                             value={settings.defaultModel}
                             onChange={(e) => setSettings(s => ({ ...s, defaultModel: e.target.value }))}
-                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 bg-secondary border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                         >
                             {modelOptions.map(opt => (
                                 <option key={opt.value} value={opt.value}>
@@ -83,7 +93,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
                     {/* Font Size */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium text-zinc-300">
+                        <label className="text-sm font-medium text-foreground">
                             Font Size
                         </label>
                         <div className="flex gap-2">
@@ -94,8 +104,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                                     size="sm"
                                     onClick={() => setSettings(s => ({ ...s, fontSize: size }))}
                                     className={settings.fontSize === size 
-                                        ? 'bg-blue-600 hover:bg-blue-700' 
-                                        : 'border-zinc-700 text-zinc-400 hover:text-white'
+                                        ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
+                                        : 'border-border text-muted-foreground hover:text-foreground'
                                     }
                                 >
                                     {size.charAt(0).toUpperCase() + size.slice(1)}
@@ -106,32 +116,30 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
                     {/* Theme */}
                     <div className="space-y-2">
-                        <label className="text-sm font-medium text-zinc-300">
+                        <label className="text-sm font-medium text-foreground">
                             Theme
                         </label>
                         <div className="flex gap-2">
-                            {(['dark', 'light', 'system'] as const).map(theme => (
+                            {themeOptions.map(({ value, label, icon: Icon }) => (
                                 <Button
-                                    key={theme}
-                                    variant={settings.theme === theme ? 'default' : 'outline'}
+                                    key={value}
+                                    variant={settings.theme === value ? 'default' : 'outline'}
                                     size="sm"
-                                    onClick={() => setSettings(s => ({ ...s, theme: theme }))}
-                                    className={settings.theme === theme 
-                                        ? 'bg-blue-600 hover:bg-blue-700' 
-                                        : 'border-zinc-700 text-zinc-400 hover:text-white'
+                                    onClick={() => setSettings(s => ({ ...s, theme: value }))}
+                                    className={settings.theme === value 
+                                        ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
+                                        : 'border-border text-muted-foreground hover:text-foreground'
                                     }
                                 >
-                                    {theme.charAt(0).toUpperCase() + theme.slice(1)}
+                                    <Icon className="w-4 h-4 mr-1" />
+                                    {label}
                                 </Button>
                             ))}
                         </div>
-                        <p className="text-xs text-zinc-500">
-                            Note: Only dark theme is currently supported
-                        </p>
                     </div>
 
                     {/* Danger Zone */}
-                    <div className="pt-4 border-t border-zinc-800">
+                    <div className="pt-4 border-t border-border">
                         <h4 className="text-sm font-medium text-red-400 mb-2">Danger Zone</h4>
                         <Button
                             variant="outline"
@@ -142,7 +150,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                             <Trash2 className="w-4 h-4 mr-2" />
                             Clear All Data
                         </Button>
-                        <p className="text-xs text-zinc-500 mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                             This will delete all your chats and settings
                         </p>
                     </div>
@@ -152,13 +160,13 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     <Button
                         variant="ghost"
                         onClick={() => onOpenChange(false)}
-                        className="text-zinc-400"
+                        className="text-muted-foreground"
                     >
                         Cancel
                     </Button>
                     <Button
                         onClick={handleSave}
-                        className="bg-blue-600 hover:bg-blue-700"
+                        className="bg-primary text-primary-foreground hover:bg-primary/90"
                     >
                         Save Changes
                     </Button>

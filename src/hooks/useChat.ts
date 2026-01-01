@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useChat as useAiChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import type { Message as DbMessage, ModelKey } from '@/types';
@@ -13,6 +13,7 @@ import {
     getStoredMessages,
     type StoredChat 
 } from '@/lib/chatStorage';
+import { trackTopic, extractTopics } from '@/lib/userPreferences';
 
 interface UseChatOptions {
     initialMessages?: DbMessage[];
@@ -41,10 +42,18 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
     const { initialMessages = [], initialModel = 'general', chatId: initialChatId } = options;
     const { isAuthenticated, user } = useAuth();
 
-    const [chatId, setChatId] = useState<string | null>(initialChatId || null);
+    // Generate a stable chat ID upfront if none provided - this prevents hook reinitialization
+    const [chatId, setChatId] = useState<string | null>(() => initialChatId || null);
+    const [hasCreatedChat, setHasCreatedChat] = useState(!!initialChatId);
     const [currentModel, setCurrentModel] = useState<ModelKey>(initialModel);
     const [webSearchEnabled, setWebSearchEnabled] = useState(false);
     const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+    
+    // Use a ref to track chatId for callbacks (avoids stale closure issues)
+    const chatIdRef = useRef<string | null>(chatId);
+    useEffect(() => {
+        chatIdRef.current = chatId;
+    }, [chatId]);
 
     // Load messages from localStorage if we have a chatId
     const storedMessages = useMemo(() => {
@@ -60,14 +69,15 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
     const effectiveInitialMessages = initialMessages.length > 0 ? initialMessages : storedMessages;
 
-    // Create transport with dynamic body that includes current model/settings
+    // Create transport with dynamic body that includes current model/settings and userId
     const transport = useMemo(() => new DefaultChatTransport({
         api: '/api/chat',
         body: () => ({
             model: currentModel,
             webSearch: webSearchEnabled,
+            userId: user?.id, // Pass user ID for preferences context
         }),
-    }), [currentModel, webSearchEnabled]);
+    }), [currentModel, webSearchEnabled, user?.id]);
 
     // Use AI SDK v3 hook with transport
     const {
@@ -91,9 +101,10 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             toast.error(err.message || 'Failed to send message');
         },
         onFinish: async (options) => {
-            // Save Assistant Message
+            // Save Assistant Message - use ref for current chatId
+            const currentChatId = chatIdRef.current;
             const message = options.messages[options.messages.length - 1];
-            if (chatId && message?.role === 'assistant') {
+            if (currentChatId && message?.role === 'assistant') {
                 const textContent = message.parts
                     ?.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
                     .map(p => p.text)
@@ -102,7 +113,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                 // Save to localStorage
                 saveMessage({
                     id: message.id,
-                    chatId: chatId,
+                    chatId: currentChatId,
                     role: 'assistant',
                     content: textContent,
                     createdAt: Date.now()
@@ -110,7 +121,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
                 // Also try to save to backend if authenticated
                 if (isAuthenticated) {
-                    await saveMessageToBackend(chatId, 'assistant', textContent);
+                    await saveMessageToBackend(currentChatId, 'assistant', textContent);
                 }
             }
         }
@@ -187,6 +198,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                             updatedAt: Date.now()
                         });
                         setChatId(currentChatId);
+                        setHasCreatedChat(true);
                         window.history.pushState({}, '', `/chat/${currentChatId}`);
                     }
                     
@@ -220,11 +232,13 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             return;
         }
 
+        // Create Chat if not exists - generate ID but don't update state until after sending
         let currentChatId = chatId;
+        let isNewChat = false;
 
-        // Create Chat if not exists - do this FIRST before sending
-        if (!currentChatId) {
-            currentChatId = crypto.randomUUID();
+        if (!currentChatId || !hasCreatedChat) {
+            currentChatId = chatId || crypto.randomUUID();
+            isNewChat = true;
             const chatTitle = content.slice(0, 50) + (content.length > 50 ? '...' : '');
             
             // Save to localStorage first (always works)
@@ -236,8 +250,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                 updatedAt: Date.now()
             });
 
-            // Set chat ID immediately before any async operations
-            setChatId(currentChatId);
+            // Update URL immediately
             window.history.pushState({}, '', `/chat/${currentChatId}`);
 
             // Also try to save to backend if authenticated (non-blocking)
@@ -266,6 +279,12 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             createdAt: Date.now()
         });
 
+        // Track topics for user context (non-blocking)
+        if (user?.id) {
+            const topics = extractTopics(content);
+            topics.forEach(topic => trackTopic(user.id, topic));
+        }
+
         // Also try to save to backend if authenticated (non-blocking)
         if (isAuthenticated) {
             saveMessageToBackend(currentChatId, 'user', content).catch(() => {});
@@ -290,17 +309,28 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             }
         }
 
-        // Trigger AI SDK submit with text and optional image attachments
-        if (attachments.length > 0) {
-            await sendAiMessage({ 
-                text: content || 'What is in this image?',
-                files: attachments
-            });
-        } else {
-            await sendAiMessage({ text: content });
+        // Update chat ID state BEFORE sending (important for hook stability)
+        if (isNewChat) {
+            setChatId(currentChatId);
+            setHasCreatedChat(true);
         }
 
-    }, [chatId, currentModel, isAuthenticated, user, sendAiMessage]);
+        // Trigger AI SDK submit with text and optional image attachments
+        try {
+            if (attachments.length > 0) {
+                await sendAiMessage({ 
+                    text: content || 'What is in this image?',
+                    files: attachments
+                });
+            } else {
+                await sendAiMessage({ text: content });
+            }
+        } catch (err) {
+            console.error('Failed to send message:', err);
+            toast.error('Failed to send message. Please try again.');
+        }
+
+    }, [chatId, hasCreatedChat, currentModel, isAuthenticated, user, sendAiMessage]);
 
     // Helper function to convert File to base64
     const fileToBase64 = (file: File): Promise<string> => {

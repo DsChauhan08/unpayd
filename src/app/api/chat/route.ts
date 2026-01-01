@@ -1,4 +1,6 @@
 import { MODELS, getCerebrasKeys, getOpenRouterKeys, type ModelKey, type ChatMessage } from '@/lib/openrouter';
+import { performWebSearch, formatSearchResultsForLLM } from '@/lib/websearch';
+import { getUserPreferences, formatPreferencesForContext } from '@/lib/userPreferences';
 import { createOpenAI } from '@ai-sdk/openai';
 import { streamText, createUIMessageStreamResponse } from 'ai';
 
@@ -9,10 +11,11 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        let { messages, model = 'general', webSearch = false } = body as {
+        let { messages, model = 'general', webSearch = false, userId } = body as {
             messages: any[];
             model: ModelKey;
             webSearch: boolean;
+            userId?: string;
         };
 
         if (!messages || !Array.isArray(messages)) {
@@ -39,6 +42,33 @@ export async function POST(request: Request) {
 
         let lastError: Error | null = null;
         const errors: string[] = [];
+
+        // Perform web search if enabled
+        let searchContext = '';
+        if (webSearch) {
+            // Get the last user message for the search query
+            const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
+            if (lastUserMessage) {
+                const query = lastUserMessage.parts
+                    ?.filter((p: any) => p.type === 'text')
+                    .map((p: any) => p.text)
+                    .join(' ') || lastUserMessage.content || '';
+                
+                if (query) {
+                    console.log(`[Chat API] Performing web search for: "${query}"`);
+                    const searchResults = await performWebSearch(query);
+                    searchContext = formatSearchResultsForLLM(searchResults);
+                    console.log(`[Chat API] Web search completed, got ${searchResults.results.length} results`);
+                }
+            }
+        }
+
+        // Get user preferences for context
+        let preferencesContext = '';
+        if (userId) {
+            const preferences = getUserPreferences(userId);
+            preferencesContext = formatPreferencesForContext(preferences);
+        }
 
         // Convert UI messages to core messages format with image support
         const coreMessages = messages.map(m => {
@@ -85,6 +115,20 @@ export async function POST(request: Request) {
 
         console.log(`[Chat API] Model: ${model}, Providers: ${modelConfig.providers.map(p => p.name).join(', ')}`);
 
+        // Build system prompt with search results and user preferences
+        let systemPrompt = 'You are a helpful AI assistant.';
+        
+        if (preferencesContext) {
+            systemPrompt += `\n\nUser Context:\n${preferencesContext}`;
+        }
+        
+        if (webSearch && searchContext) {
+            systemPrompt = `You have access to real-time web search results. Use the following search results to provide accurate, up-to-date information. Always cite your sources when using web search results.\n${searchContext}\n\nBased on the search results above, provide a comprehensive answer.`;
+            if (preferencesContext) {
+                systemPrompt += `\n\nUser Context:\n${preferencesContext}`;
+            }
+        }
+
         // Iterate through configured providers for this model
         for (const provider of modelConfig.providers) {
             if (provider.name === 'cerebras') {
@@ -109,7 +153,7 @@ export async function POST(request: Request) {
                             // Use .chat() to force chat completions endpoint
                             model: cerebras.chat(provider.id),
                             messages: coreMessages,
-                            system: 'You are a helpful AI assistant.',
+                            system: systemPrompt,
                         });
 
                         console.log(`[Chat API] Cerebras success with model ${provider.id}`);
@@ -158,9 +202,7 @@ export async function POST(request: Request) {
                             // Use .chat() to force chat completions endpoint
                             model: openrouter.chat(provider.id),
                             messages: coreMessages,
-                            system: webSearch
-                                ? 'You have access to web search. When answering questions, use the search results to provide accurate, up-to-date information. Always cite your sources when using web search results.'
-                                : 'You are a helpful AI assistant.',
+                            system: systemPrompt,
                             ...(webSearch ? { experimental_providerMetadata: providerConfig } : {})
                         });
 

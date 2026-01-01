@@ -16,6 +16,7 @@ import {
     unarchiveChat
 } from '@/lib/chatStorage';
 import { SettingsDialog } from './SettingsDialog';
+import { UserPreferencesDialog } from './UserPreferencesDialog';
 import {
     Sidebar,
     SidebarContent,
@@ -47,6 +48,7 @@ import {
     LogOut,
     Settings,
     User,
+    UserCog,
 } from 'lucide-react';
 import { UnpaydLogo } from '@/components/ui/logo';
 import { useAuth } from '@/hooks/useAuth';
@@ -72,6 +74,7 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
     const [searchQuery, setSearchQuery] = useState('');
     const [showArchived, setShowArchived] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [preferencesOpen, setPreferencesOpen] = useState(false);
 
     const fetchChats = async () => {
         // Get chats based on current view (archived or active)
@@ -195,7 +198,7 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
     const groupedChats = groupChatsByDate(filteredChats);
 
     return (
-        <Sidebar className="border-r border-zinc-800 bg-zinc-950">
+        <Sidebar className="border-r border-border bg-card">
             <SidebarHeader className="p-4">
                 {/* Logo */}
                 <Link href="/" className="flex items-center gap-2 mb-4">
@@ -205,7 +208,7 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
                 {/* New Chat Button */}
                 <Button
                     onClick={handleNewChat}
-                    className="w-full bg-zinc-800 hover:bg-zinc-700 text-white justify-start gap-2"
+                    className="w-full bg-secondary hover:bg-muted text-foreground justify-start gap-2"
                 >
                     <Plus className="w-4 h-4" />
                     New Chat
@@ -213,12 +216,12 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
 
                 {/* Search */}
                 <div className="relative mt-3">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Search chats..."
-                        className="pl-9 bg-zinc-900 border-zinc-800 focus:border-zinc-700"
+                        className="pl-9 bg-secondary border-border focus:border-muted"
                     />
                 </div>
             </SidebarHeader>
@@ -233,7 +236,7 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
                             onClick={() => setShowArchived(!showArchived)}
                             className={cn(
                                 "w-full justify-start gap-2 text-sm",
-                                showArchived ? "text-blue-400" : "text-zinc-500"
+                                showArchived ? "text-blue-400" : "text-muted-foreground"
                             )}
                         >
                             <Archive className="w-4 h-4" />
@@ -244,7 +247,7 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
                     {/* Chat History */}
                     {Object.entries(groupedChats).map(([date, chatGroup]) => (
                         <SidebarGroup key={date}>
-                            <SidebarGroupLabel className="text-zinc-500 text-xs uppercase tracking-wider">
+                            <SidebarGroupLabel className="text-muted-foreground text-xs uppercase tracking-wider">
                                 {date}
                             </SidebarGroupLabel>
                             <SidebarGroupContent>
@@ -274,7 +277,7 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
                                                         e.stopPropagation();
                                                         handleDeleteChat(chat.id);
                                                     }}
-                                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0 text-zinc-500 hover:text-red-400 hover:bg-red-400/10"
+                                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 shrink-0 text-muted-foreground hover:text-red-400 hover:bg-red-400/10"
                                                 >
                                                     <Trash2 className="w-3 h-3" />
                                                 </Button>
@@ -290,10 +293,10 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
                                                             <MoreHorizontal className="w-3 h-3" />
                                                         </Button>
                                                     </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-800">
+                                                    <DropdownMenuContent align="end" className="bg-card border-border">
                                                         {showArchived ? (
                                                             <DropdownMenuItem
-                                                                className="text-zinc-400"
+                                                                className="text-muted-foreground"
                                                                 onClick={() => handleUnarchiveChat(chat.id)}
                                                             >
                                                                 <ArchiveRestore className="w-4 h-4 mr-2" />
@@ -301,7 +304,7 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
                                                             </DropdownMenuItem>
                                                         ) : (
                                                             <DropdownMenuItem
-                                                                className="text-zinc-400"
+                                                                className="text-muted-foreground"
                                                                 onClick={() => handleArchiveChat(chat.id)}
                                                             >
                                                                 <Archive className="w-4 h-4 mr-2" />
@@ -327,47 +330,54 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
 
                     {/* Empty state */}
                     {chats.length === 0 && (
-                        <div className="p-4 text-center text-zinc-500 text-sm">
+                        <div className="p-4 text-center text-muted-foreground text-sm">
                             No chats yet. Start a new conversation!
                         </div>
                     )}
                 </ScrollArea>
             </SidebarContent>
 
-            <SidebarFooter className="p-4 border-t border-zinc-800">
+            <SidebarFooter className="p-4 border-t border-border">
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button
                             variant="ghost"
-                            className="w-full justify-start gap-3 hover:bg-zinc-800"
+                            className="w-full justify-start gap-3 hover:bg-secondary"
                         >
-                            <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center">
-                                <User className="w-4 h-4 text-zinc-300" />
+                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                                <User className="w-4 h-4 text-muted-foreground" />
                             </div>
                             <div className="flex-1 text-left min-w-0">
-                                <p className="text-sm font-medium text-white truncate">
+                                <p className="text-sm font-medium text-foreground truncate">
                                     {user?.displayName || user?.email || 'User'}
                                 </p>
                                 {user?.email && (
-                                    <p className="text-xs text-zinc-500 truncate">{user.email}</p>
+                                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                                 )}
                             </div>
-                            <ChevronDown className="w-4 h-4 text-zinc-500 shrink-0" />
+                            <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                         align="end"
                         side="top"
-                        className="w-56 bg-zinc-900 border-zinc-800"
+                        className="w-56 bg-card border-border"
                     >
                         <DropdownMenuItem 
-                            className="text-zinc-400 cursor-pointer"
+                            className="text-muted-foreground cursor-pointer"
+                            onClick={() => setPreferencesOpen(true)}
+                        >
+                            <UserCog className="w-4 h-4 mr-2" />
+                            My Preferences
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                            className="text-muted-foreground cursor-pointer"
                             onClick={() => setSettingsOpen(true)}
                         >
                             <Settings className="w-4 h-4 mr-2" />
                             Settings
                         </DropdownMenuItem>
-                        <DropdownMenuSeparator className="bg-zinc-800" />
+                        <DropdownMenuSeparator className="bg-border" />
                         <DropdownMenuItem
                             onClick={handleLogout}
                             className="text-red-400 cursor-pointer"
@@ -381,6 +391,9 @@ export function ChatSidebar({ onNewChat }: ChatSidebarProps) {
 
             {/* Settings Dialog */}
             <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+            
+            {/* User Preferences Dialog */}
+            <UserPreferencesDialog open={preferencesOpen} onOpenChange={setPreferencesOpen} />
         </Sidebar>
     );
 }

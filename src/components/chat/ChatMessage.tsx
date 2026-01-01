@@ -40,14 +40,14 @@ export const ChatMessage = memo(function ChatMessage({
                     const language = match[1] || '';
                     const code = match[2] || '';
                     return (
-                        <div key={i} className="my-3 rounded-lg overflow-hidden bg-zinc-950 border border-zinc-800">
+                        <div key={i} className="my-3 rounded-lg overflow-hidden bg-muted border border-border">
                             {language && (
-                                <div className="px-3 py-1.5 text-xs text-zinc-500 bg-zinc-900 border-b border-zinc-800">
+                                <div className="px-3 py-1.5 text-xs text-muted-foreground bg-secondary border-b border-border">
                                     {language}
                                 </div>
                             )}
                             <pre className="p-3 overflow-x-auto">
-                                <code className="text-sm text-zinc-300 font-mono">{code}</code>
+                                <code className="text-sm text-foreground font-mono">{code}</code>
                             </pre>
                         </div>
                     );
@@ -79,9 +79,9 @@ export const ChatMessage = memo(function ChatMessage({
         // Italic
         formatted = formatted.replace(/\*([^*]+)\*/g, '<em>$1</em>');
         // Inline code
-        formatted = formatted.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 text-sm font-mono">$1</code>');
+        formatted = formatted.replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-muted text-foreground text-sm font-mono">$1</code>');
         // Links
-        formatted = formatted.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="text-blue-400 hover:underline">$1</a>');
+        formatted = formatted.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="text-blue-500 dark:text-blue-400 hover:underline">$1</a>');
 
         return <span dangerouslySetInnerHTML={{ __html: formatted }} />;
     };
@@ -106,18 +106,18 @@ export const ChatMessage = memo(function ChatMessage({
                 <div className={cn(
                     "rounded-2xl px-4 py-3",
                     isUser
-                        ? "bg-zinc-800 text-white"
-                        : "bg-transparent text-zinc-100"
+                        ? "bg-secondary text-foreground"
+                        : "bg-transparent text-foreground"
                 )}>
-                    <div className="prose prose-invert prose-sm max-w-none">
+                    <div className="prose prose-sm max-w-none dark:prose-invert">
                         {content ? renderContent(content) : isStreaming && (
-                            <div className="flex items-center space-x-2 text-zinc-500 italic">
+                            <div className="flex items-center space-x-2 text-muted-foreground italic">
                                 <Sparkles className="w-3 h-3 animate-spin" />
                                 <span>Thinking...</span>
                             </div>
                         )}
                         {isStreaming && content && (
-                            <span className="inline-block w-2 h-4 ml-1 bg-white/80 cursor-blink" />
+                            <span className="inline-block w-2 h-4 ml-1 bg-foreground/80 cursor-blink" />
                         )}
                     </div>
                 </div>
@@ -128,7 +128,7 @@ export const ChatMessage = memo(function ChatMessage({
                         <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 px-2 text-xs text-zinc-500 hover:text-white"
+                            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
                             onClick={copyToClipboard}
                         >
                             {copied ? (
@@ -149,8 +149,8 @@ export const ChatMessage = memo(function ChatMessage({
 
             {/* Avatar for user */}
             {isUser && (
-                <div className="w-8 h-8 rounded-lg bg-zinc-700 flex items-center justify-center shrink-0">
-                    <User className="w-4 h-4 text-zinc-300" />
+                <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                    <User className="w-4 h-4 text-muted-foreground" />
                 </div>
             )}
         </div>
