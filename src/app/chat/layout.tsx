@@ -43,13 +43,14 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     }
 
     return (
-        <SidebarProvider defaultOpen={true}>
+        <SidebarProvider defaultOpen={false}>
             <ChatSidebar
                 onNewChat={() => router.push('/chat')}
             />
-            <SidebarInset className="bg-black">
-                <header className="flex items-center h-14 px-4 border-b border-zinc-800/50">
-                    <SidebarTrigger className="text-zinc-400 hover:text-white" />
+            <SidebarInset className="bg-background min-h-screen">
+                <header className="flex items-center h-14 px-2 sm:px-4 border-b border-border sticky top-0 bg-background z-20">
+                    <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
+                    <span className="ml-2 text-sm font-medium text-foreground sm:hidden">Unpayd</span>
                 </header>
                 <main className="flex-1 overflow-hidden">
                     {children}

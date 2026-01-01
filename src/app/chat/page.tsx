@@ -17,6 +17,7 @@ const SUGGESTIONS = [
 
 export default function ChatPage() {
     const scrollRef = useRef<HTMLDivElement>(null);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
     const {
         messages,
         isLoading,
@@ -32,9 +33,7 @@ export default function ChatPage() {
 
     // Auto-scroll to bottom on new messages
     useEffect(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
     const handleSuggestionClick = (suggestion: string) => {
@@ -42,28 +41,28 @@ export default function ChatPage() {
     };
 
     return (
-        <div className="flex flex-col h-full">
-            {/* Messages area */}
-            <ScrollArea ref={scrollRef} className="flex-1 overflow-y-auto">
-                <div className="max-w-4xl mx-auto">
+        <div className="flex flex-col h-[calc(100vh-3.5rem)] relative">
+            {/* Messages area - scrollable */}
+            <div ref={scrollRef} className="flex-1 overflow-y-auto pb-4">
+                <div className="max-w-4xl mx-auto px-2 sm:px-4">
                     {messages.length === 0 ? (
                         /* Empty state - Grok-like welcome */
-                        <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 pt-20">
-                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center mb-6">
-                                <Sparkles className="w-8 h-8 text-white" />
+                        <div className="flex flex-col items-center justify-center min-h-[50vh] px-4 pt-10 sm:pt-20">
+                            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center mb-4 sm:mb-6">
+                                <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
                             </div>
-                            <h1 className="text-3xl font-bold text-white mb-2">Unpayd</h1>
-                            <p className="text-zinc-400 text-center mb-8 max-w-md">
+                            <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">Unpayd</h1>
+                            <p className="text-muted-foreground text-center mb-6 sm:mb-8 max-w-md text-sm sm:text-base">
                                 Your free AI assistant. Ask me anything, I&apos;m here to help.
                             </p>
 
                             {/* Suggestion chips */}
-                            <div className="flex flex-wrap gap-2 justify-center max-w-xl">
+                            <div className="flex flex-wrap gap-2 justify-center max-w-xl px-2">
                                 {SUGGESTIONS.map((suggestion) => (
                                     <button
                                         key={suggestion}
                                         onClick={() => handleSuggestionClick(suggestion)}
-                                        className="px-4 py-2 rounded-full bg-zinc-900 border border-zinc-800 text-sm text-zinc-300 hover:bg-zinc-800 hover:border-zinc-700 transition-colors"
+                                        className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-full bg-secondary border border-border text-xs sm:text-sm text-muted-foreground hover:bg-muted hover:border-muted transition-colors"
                                     >
                                         {suggestion}
                                     </button>
@@ -84,20 +83,21 @@ export default function ChatPage() {
 
                             {/* Error message */}
                             {error && (
-                                <div className="px-4 py-3 mx-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                                <div className="px-4 py-3 mx-2 sm:mx-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
                                     {error}
                                 </div>
                             )}
+                            <div ref={messagesEndRef} />
                         </div>
                     )}
                 </div>
-            </ScrollArea>
+            </div>
 
-            {/* Input area */}
-            <div className="border-t border-zinc-800/50 pt-4 pb-6">
-                <div className="max-w-3xl mx-auto px-4">
+            {/* Input area - FIXED at bottom */}
+            <div className="sticky bottom-0 left-0 right-0 bg-background border-t border-border pt-2 sm:pt-4 pb-4 sm:pb-6 z-10">
+                <div className="max-w-3xl mx-auto px-2 sm:px-4">
                     {/* Model selector */}
-                    <div className="flex items-center justify-center mb-3">
+                    <div className="flex items-center justify-center mb-2 sm:mb-3">
                         <ModelSelector
                             value={currentModel}
                             onChange={setCurrentModel}
@@ -115,8 +115,8 @@ export default function ChatPage() {
                         onToggleWebSearch={() => setWebSearchEnabled(!webSearchEnabled)}
                     />
 
-                    {/* Disclaimer */}
-                    <p className="text-xs text-zinc-600 text-center mt-3">
+                    {/* Disclaimer - hidden on mobile */}
+                    <p className="hidden sm:block text-xs text-muted-foreground text-center mt-3">
                         Unpayd can make mistakes. Consider checking important information.
                     </p>
                 </div>

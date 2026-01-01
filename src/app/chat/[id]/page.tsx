@@ -2,7 +2,6 @@
 
 import { useRef, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { ChatMessage } from '@/components/chat/ChatMessage';
 import { ModelSelector } from '@/components/chat/ModelSelector';
@@ -13,7 +12,7 @@ import type { ModelKey } from '@/types';
 export default function ChatPage() {
     const params = useParams();
     const chatId = params.id as string;
-    const scrollRef = useRef<HTMLDivElement>(null);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
     
     // Get chat info from storage
     const chatInfo = getChatById(chatId);
@@ -36,19 +35,17 @@ export default function ChatPage() {
 
     // Auto-scroll to bottom on new messages
     useEffect(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        }
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
     return (
-        <div className="flex flex-col h-full">
-            {/* Messages area */}
-            <ScrollArea ref={scrollRef} className="flex-1 overflow-y-auto">
-                <div className="max-w-4xl mx-auto">
+        <div className="flex flex-col h-[calc(100vh-3.5rem)] relative">
+            {/* Messages area - scrollable */}
+            <div className="flex-1 overflow-y-auto pb-4">
+                <div className="max-w-4xl mx-auto px-2 sm:px-4">
                     {messages.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 pt-20">
-                            <p className="text-zinc-500">Loading chat...</p>
+                        <div className="flex flex-col items-center justify-center min-h-[50vh] px-4 pt-10 sm:pt-20">
+                            <p className="text-muted-foreground">Loading chat...</p>
                         </div>
                     ) : (
                         <div className="py-4">
@@ -62,19 +59,20 @@ export default function ChatPage() {
                             ))}
 
                             {error && (
-                                <div className="px-4 py-3 mx-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                                <div className="px-4 py-3 mx-2 sm:mx-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
                                     {error}
                                 </div>
                             )}
+                            <div ref={messagesEndRef} />
                         </div>
                     )}
                 </div>
-            </ScrollArea>
+            </div>
 
-            {/* Input area */}
-            <div className="border-t border-zinc-800/50 pt-4 pb-6">
-                <div className="max-w-3xl mx-auto px-4">
-                    <div className="flex items-center justify-center mb-3">
+            {/* Input area - FIXED at bottom */}
+            <div className="sticky bottom-0 left-0 right-0 bg-background border-t border-border pt-2 sm:pt-4 pb-4 sm:pb-6 z-10">
+                <div className="max-w-3xl mx-auto px-2 sm:px-4">
+                    <div className="flex items-center justify-center mb-2 sm:mb-3">
                         <ModelSelector
                             value={currentModel}
                             onChange={setCurrentModel}
@@ -91,7 +89,8 @@ export default function ChatPage() {
                         onToggleWebSearch={() => setWebSearchEnabled(!webSearchEnabled)}
                     />
 
-                    <p className="text-xs text-zinc-600 text-center mt-3">
+                    {/* Disclaimer - hidden on mobile */}
+                    <p className="hidden sm:block text-xs text-muted-foreground text-center mt-3">
                         Unpayd can make mistakes. Consider checking important information.
                     </p>
                 </div>

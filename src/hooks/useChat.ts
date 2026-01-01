@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useChat as useAiChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import type { Message as DbMessage, ModelKey } from '@/types';
@@ -41,6 +42,7 @@ interface UseChatReturn {
 export function useChat(options: UseChatOptions = {}): UseChatReturn {
     const { initialMessages = [], initialModel = 'general', chatId: initialChatId } = options;
     const { isAuthenticated, user } = useAuth();
+    const router = useRouter();
 
     // Generate a stable chat ID upfront if none provided - this prevents hook reinitialization
     const [chatId, setChatId] = useState<string | null>(() => initialChatId || null);
@@ -199,7 +201,6 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                         });
                         setChatId(currentChatId);
                         setHasCreatedChat(true);
-                        window.history.pushState({}, '', `/chat/${currentChatId}`);
                     }
                     
                     // Save user's prompt
@@ -220,8 +221,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                         createdAt: Date.now()
                     });
                     
-                    // Force refresh messages
-                    window.location.reload();
+                    // Navigate to the new chat
+                    router.push(`/chat/${currentChatId}`);
                 } else {
                     toast.error(data.error || 'Failed to generate image');
                 }
@@ -250,8 +251,8 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                 updatedAt: Date.now()
             });
 
-            // Update URL immediately
-            window.history.pushState({}, '', `/chat/${currentChatId}`);
+            // Navigate to the new chat URL immediately
+            router.push(`/chat/${currentChatId}`);
 
             // Also try to save to backend if authenticated (non-blocking)
             if (isAuthenticated && user) {
@@ -290,20 +291,23 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             saveMessageToBackend(currentChatId, 'user', content).catch(() => {});
         }
 
-        // Convert files to FileUIPart format for image attachments
+        // Convert files to proper format for AI SDK
+        // AI SDK FileUIPart expects: { type: 'file', mediaType: string, url: string (data URL) }
         const attachments: Array<{ type: 'file'; mediaType: string; url: string }> = [];
         if (files && files.length > 0) {
             for (const file of files) {
                 if (file.type.startsWith('image/')) {
                     try {
-                        const base64 = await fileToBase64(file);
+                        const dataUrl = await fileToBase64(file);  // Returns data URL like data:image/png;base64,...
                         attachments.push({
                             type: 'file',
                             mediaType: file.type,
-                            url: base64
+                            url: dataUrl
                         });
+                        console.log(`[useChat] Added image attachment: ${file.name}, size: ${file.size}`);
                     } catch (err) {
                         console.error('Failed to convert file to base64:', err);
+                        toast.error(`Failed to process ${file.name}`);
                     }
                 }
             }
@@ -318,6 +322,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         // Trigger AI SDK submit with text and optional image attachments
         try {
             if (attachments.length > 0) {
+                console.log(`[useChat] Sending message with ${attachments.length} image(s)`);
                 await sendAiMessage({ 
                     text: content || 'What is in this image?',
                     files: attachments
@@ -330,7 +335,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             toast.error('Failed to send message. Please try again.');
         }
 
-    }, [chatId, hasCreatedChat, currentModel, isAuthenticated, user, sendAiMessage]);
+    }, [chatId, hasCreatedChat, currentModel, isAuthenticated, user, sendAiMessage, router]);
 
     // Helper function to convert File to base64
     const fileToBase64 = (file: File): Promise<string> => {

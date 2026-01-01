@@ -81,14 +81,16 @@ async function searxngSearch(query: string): Promise<SearchResult[]> {
     }
 }
 
-// DuckDuckGo Instant Answers (no API key needed, limited results)
+// DuckDuckGo search using HTML parsing (more reliable than Instant Answers API)
 async function duckDuckGoSearch(query: string): Promise<SearchResult[]> {
     try {
+        // Use DuckDuckGo HTML search and parse results
         const response = await fetch(
-            `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`,
+            `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
             {
                 headers: {
-                    'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': 'text/html',
                 },
             }
         );
@@ -97,32 +99,46 @@ async function duckDuckGoSearch(query: string): Promise<SearchResult[]> {
             throw new Error(`DuckDuckGo failed: ${response.status}`);
         }
 
-        const data = await response.json();
+        const html = await response.text();
         const results: SearchResult[] = [];
 
-        // Abstract (main result)
-        if (data.AbstractText) {
-            results.push({
-                title: data.Heading || 'Summary',
-                url: data.AbstractURL || '',
-                description: data.AbstractText,
-            });
-        }
-
-        // Related topics
-        if (data.RelatedTopics) {
-            for (const topic of data.RelatedTopics.slice(0, 4)) {
-                if (topic.Text && topic.FirstURL) {
-                    results.push({
-                        title: topic.Text.split(' - ')[0] || topic.Text.slice(0, 50),
-                        url: topic.FirstURL,
-                        description: topic.Text,
-                    });
+        // Parse DuckDuckGo HTML results
+        // Results have class "result" with nested elements
+        const resultBlocks = html.split('class="result ');
+        
+        for (let i = 1; i < resultBlocks.length && results.length < 5; i++) {
+            const block = resultBlocks[i];
+            
+            // Extract URL from href (it's wrapped in DuckDuckGo redirect)
+            const hrefMatch = block.match(/href="[^"]*uddg=([^&"]+)/);
+            const titleMatch = block.match(/class="result__a"[^>]*>([^<]+)/);
+            const snippetMatch = block.match(/class="result__snippet"[^>]*>([^<]+)/);
+            
+            if (hrefMatch && titleMatch) {
+                let url = decodeURIComponent(hrefMatch[1]);
+                const title = titleMatch[1]
+                    .replace(/&amp;/g, '&')
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/&#x27;/g, "'")
+                    .trim();
+                const description = snippetMatch 
+                    ? snippetMatch[1]
+                        .replace(/&amp;/g, '&')
+                        .replace(/&lt;/g, '<')
+                        .replace(/&gt;/g, '>')
+                        .replace(/&#x27;/g, "'")
+                        .trim()
+                    : '';
+                
+                // Skip if it's a DuckDuckGo internal link
+                if (url && !url.includes('duckduckgo.com') && title) {
+                    results.push({ title, url, description });
                 }
             }
         }
 
-        return results.slice(0, 5);
+        return results;
     } catch (error) {
         console.error('DuckDuckGo error:', error);
         return [];

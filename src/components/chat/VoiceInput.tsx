@@ -180,14 +180,14 @@ export function VoiceInput({ onTranscript, disabled, className }: VoiceInputProp
                 const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
                 
                 if (audioBlob.size < 1000) {
-                    toast.error('Recording too short');
+                    toast.error('Recording too short. Please speak for at least 1 second.');
                     setState('idle');
                     cleanup();
                     return;
                 }
                 
                 try {
-                    // Try to use Whisper API for accurate transcription
+                    // Use Whisper API for accurate transcription
                     const formData = new FormData();
                     formData.append('audio', audioBlob, 'recording.webm');
                     
@@ -198,23 +198,31 @@ export function VoiceInput({ onTranscript, disabled, className }: VoiceInputProp
                     
                     const result = await response.json();
                     
-                    if (result.success && result.text) {
-                        onTranscript(result.text);
-                        toast.success('Voice transcribed!');
-                    } else if (transcript) {
-                        // Fallback to browser transcription
-                        onTranscript(transcript);
+                    if (result.success && result.text && result.text.trim().length > 0) {
+                        // Filter out common transcription artifacts
+                        const cleanText = result.text.trim();
+                        const artifactPatterns = [
+                            /^thank you\.?$/i,
+                            /^thanks\.?$/i,
+                            /^you\.?$/i,
+                            /^\.\.+$/,
+                            /^\s*$/,
+                        ];
+                        
+                        const isArtifact = artifactPatterns.some(p => p.test(cleanText));
+                        
+                        if (!isArtifact) {
+                            onTranscript(cleanText);
+                            toast.success('Voice transcribed!');
+                        } else {
+                            toast.error('Could not understand. Please speak clearly and try again.');
+                        }
                     } else {
-                        toast.error(result.error || 'Transcription failed');
+                        toast.error(result.error || 'Transcription failed. Please try again.');
                     }
                 } catch (error) {
                     console.error('Transcription error:', error);
-                    // Fallback to browser transcription
-                    if (transcript) {
-                        onTranscript(transcript);
-                    } else {
-                        toast.error('Failed to transcribe audio');
-                    }
+                    toast.error('Failed to transcribe audio. Check your internet connection.');
                 }
                 
                 setState('idle');
